@@ -13,5 +13,5 @@ __gnu_mcount_nc:
         mov lr, r0
         pop {r0-r3}
         @ pop previous address
-        sub sp, #4
+        add sp, #4
         bx lr
