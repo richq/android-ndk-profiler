@@ -150,10 +150,20 @@ void monstartup(const char *libname)
 	int monsize;
 	char *buffer;
 	int o;
+	uint32_t lowpc, highpc;
 	FILE *self = fopen("/proc/self/smaps", "r");
 	s_smaps = read_smaps(self, libname);
-	uint32_t lowpc = s_smaps->lo;
-	uint32_t highpc = s_smaps->hi;
+	if (s_smaps == NULL) {
+		systemMessage(0, "No smaps found");
+		return;
+	}
+	lowpc = s_smaps->lo;
+	highpc = s_smaps->hi;
+	__android_log_print(ANDROID_LOG_INFO, "PROFILING",
+			"Proflie %s %x-%x: %d",
+			libname,
+			lowpc, highpc,
+			s_smaps->base);
 	/*
 	 * round lowpc and highpc to multiples of the density we're using
 	 * so the rest of the scaling (here and in gprof) stays in ints.
@@ -334,9 +344,6 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 	frompcindex =
 		(unsigned short *)((long) frompcindex - (long) s_lowpc);
 	if ((unsigned long) frompcindex > s_textsize) {
-		__android_log_print(ANDROID_LOG_INFO, "PROFILING",
-				    "done: %x > %x", frompcindex,
-				    s_textsize);
 		goto done;
 	}
 	frompcindex =
