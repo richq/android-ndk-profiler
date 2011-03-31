@@ -51,6 +51,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <memory.h>
+#include <pthread.h>
 #include <android/log.h>
 
 #include "gmon.h"
@@ -72,15 +73,16 @@ static int ssiz;
 static char *sbuf;
 static int s_scale;
 
-static int hz = 0;
 static int hist_num_bins = 0;
 static char hist_dimension[16] = "seconds";
 static char hist_dimension_abbrev = 's';
 struct smap *s_smaps = NULL;
-static struct timespec s_last_time = {0, 0};
+static pthread_t s_runner;
+volatile long s_pc;
 
 /* see profil(2) where this is describe (incorrectly) */
 #define  SCALE_1_TO_1 0x10000L
+#define  FREQ_HZ 100
 
 static void systemMessage(int a, const char *msg)
 {
@@ -88,7 +90,7 @@ static void systemMessage(int a, const char *msg)
 			    msg);
 }
 
-void profPut32(char *b, uint32_t v)
+static void profPut32(char *b, uint32_t v)
 {
 	b[0] = v & 255;
 	b[1] = (v >> 8) & 255;
@@ -96,13 +98,13 @@ void profPut32(char *b, uint32_t v)
 	b[3] = (v >> 24) & 255;
 }
 
-void profPut16(char *b, uint16_t v)
+static void profPut16(char *b, uint16_t v)
 {
 	b[0] = v & 255;
 	b[1] = (v >> 8) & 255;
 }
 
-int profWrite8(FILE *f, uint8_t b)
+static int profWrite8(FILE *f, uint8_t b)
 {
 	if (fwrite(&b, 1, 1, f) != 1) {
 		return 1;
@@ -110,7 +112,7 @@ int profWrite8(FILE *f, uint8_t b)
 	return 0;
 }
 
-int profWrite32(FILE *f, uint32_t v)
+static int profWrite32(FILE *f, uint32_t v)
 {
 	char buf[4];
 	profPut32(buf, v);
@@ -120,7 +122,7 @@ int profWrite32(FILE *f, uint32_t v)
 	return 0;
 }
 
-int profWrite(FILE *f, char *buf, unsigned int n)
+static int profWrite(FILE *f, char *buf, unsigned int n)
 {
 	if (fwrite(buf, 1, n, f) != n) {
 		return 1;
@@ -128,18 +130,48 @@ int profWrite(FILE *f, char *buf, unsigned int n)
 	return 0;
 }
 
+static void check_profil(long frompcindex)
+{
+	if (sbuf && ssiz) {
+		uint16_t *b = (uint16_t *)sbuf;
+		int pc = ((frompcindex - (long)s_lowpc) * s_scale)/SCALE_1_TO_1;
+		if(pc >= 0 && pc < ssiz)
+			b[pc]++;
+	}
+}
+
+static void *run_profil(void *ptr)
+{
+	do {
+		struct timespec req;
+		long pc = s_pc;
+		if (pc)
+			check_profil(pc);
+		/* sleep for 1/100th of a second */
+		req.tv_sec = 0;
+		req.tv_nsec = 1e7;
+		nanosleep(&req, NULL);
+	} while (profiling != 3);
+	pthread_exit(NULL);
+	return NULL;
+}
+
 /* Control profiling;
    profiling is what mcount checks to see if
    all the data structures are ready.  */
 
-void profControl(int mode)
+static void profControl(int mode)
 {
 	if (mode) {
 		/* start */
 		profiling = 0;
+		s_pc = 0;
+		pthread_create(&s_runner, NULL, run_profil, NULL);
 	} else {
 		/* stop */
 		profiling = 3;
+		systemMessage(1, "stopping profile thread");
+		pthread_join(s_runner, NULL);
 	}
 }
 
@@ -174,13 +206,12 @@ void monstartup(const char *libname)
 	s_highpc = highpc;
 	s_textsize = highpc - lowpc;
 	monsize = (s_textsize / HISTFRACTION);
-	buffer = (char *) calloc(1, 2 * monsize);
+	buffer = calloc(1, 2 * monsize);
 	if (buffer == NULL) {
 		systemMessage(0, MSG);
 		return;
 	}
-	froms =
-		(unsigned short *) calloc(1, 4 * s_textsize / HASHFRACTION);
+	froms = calloc(1, 4 * s_textsize / HASHFRACTION);
 	if (froms == NULL) {
 		systemMessage(0, MSG);
 		free(buffer);
@@ -227,8 +258,8 @@ void moncleanup(void)
 	uint32_t frompc;
 	int toindex;
 	struct gmon_hdr ghdr;
-	systemMessage(1, "writing gmon.out");
 	profControl(0);
+	systemMessage(1, "writing gmon.out");
 	fd = fopen("/sdcard/gmon.out", "wb");
 	if (fd == NULL) {
 		systemMessage(0, "mcount: gmon.out");
@@ -241,15 +272,12 @@ void moncleanup(void)
 		fclose(fd);
 		return;
 	}
-	if (hz == 0) {
-		hz = 100;
-	}
 	hist_num_bins = ssiz;
 	if (profWrite8(fd, GMON_TAG_TIME_HIST) ||
 	    profWrite32(fd, get_real_address(s_smaps, (uint32_t) s_lowpc)) ||
 	    profWrite32(fd, get_real_address(s_smaps, (uint32_t) s_highpc)) ||
 	    profWrite32(fd, hist_num_bins) ||
-	    profWrite32(fd, hz) ||
+	    profWrite32(fd, FREQ_HZ) ||
 	    profWrite(fd, hist_dimension, 15) ||
 	    profWrite(fd, &hist_dimension_abbrev, 1)) {
 		systemMessage(0, "mcount: gmon.out hist");
@@ -294,24 +322,6 @@ void moncleanup(void)
 	fclose(fd);
 }
 
-
-static void check_profil(unsigned short *frompcindex)
-{
-	struct timespec req;
-	clock_gettime(CLOCK_REALTIME, &req);
-	unsigned int clockTicks = (((req.tv_sec - s_last_time.tv_sec) * 1e9)
-			+ (req.tv_nsec - s_last_time.tv_nsec));
-	if (clockTicks >= 1e7) {
-		s_last_time = req;
-		if (sbuf && ssiz) {
-			uint16_t *b = (uint16_t *)sbuf;
-			int pc = (((long)frompcindex - (long)s_lowpc) * s_scale)/0x10000;
-			if(pc >= 0 && pc < ssiz)
-				b[pc]++;
-		}
-	}
-}
-
 void profCount(unsigned short *frompcindex, char *selfpc)
 {
 	struct tostruct *top;
@@ -335,7 +345,7 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		return;
 	}
 	profiling++;
-	check_profil(frompcindex);
+	s_pc = (long)frompcindex;
 	/*
 	 * check that frompcindex is a reasonable pc value.
 	 * for example: signal catchers get called from the stack,
@@ -426,9 +436,4 @@ overflow:
 #define TOLIMIT "mcount: tos overflow\n"
 	systemMessage(0, TOLIMIT);
 	goto out;
-}
-
-void profSetHertz(int h)
-{
-	hz = h;
 }
