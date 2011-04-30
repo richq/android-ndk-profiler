@@ -1,0 +1,65 @@
+diff -ur native-activity-original/AndroidManifest.xml native-activity/AndroidManifest.xml
+--- native-activity-original/AndroidManifest.xml	2011-04-30 19:27:38.000000000 +0200
++++ native-activity/AndroidManifest.xml	2011-04-30 19:28:06.000000000 +0200
+@@ -25,6 +25,8 @@
+             </intent-filter>
+         </activity>
+     </application>
++    <!-- this is required to write gmon.out -->
++    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+ 
+ </manifest> 
+ <!-- END_INCLUDE(manifest) -->
+diff -ur native-activity-original/jni/Android.mk native-activity/jni/Android.mk
+--- native-activity-original/jni/Android.mk	2011-04-30 19:27:38.000000000 +0200
++++ native-activity/jni/Android.mk	2011-04-30 19:31:16.000000000 +0200
+@@ -14,6 +14,18 @@
+ #
+ LOCAL_PATH := $(call my-dir)
+ 
++# remove -ffunction-sections and -fomit-frame-pointer from the default compile flags
++TARGET_thumb_release_CFLAGS := $(filter-out -ffunction-sections,$(TARGET_thumb_release_CFLAGS))
++TARGET_thumb_release_CFLAGS := $(filter-out -fomit-frame-pointer,$(TARGET_thumb_release_CFLAGS))
++TARGET_CFLAGS := $(filter-out -ffunction-sections,$(TARGET_CFLAGS))
++
++# include libandprof.a in the build
++include $(CLEAR_VARS)
++LOCAL_MODULE := andprof
++LOCAL_SRC_FILES := $(TARGET_ARCH_ABI)/libandprof.a
++include $(PREBUILT_STATIC_LIBRARY)
++
++
+ include $(CLEAR_VARS)
+ 
+ LOCAL_MODULE    := native-activity
+@@ -21,6 +33,10 @@
+ LOCAL_LDLIBS    := -llog -landroid -lEGL -lGLESv1_CM
+ LOCAL_STATIC_LIBRARIES := android_native_app_glue
+ 
++# compile with profiling
++LOCAL_CFLAGS := -pg
++LOCAL_STATIC_LIBRARIES += andprof
++
+ include $(BUILD_SHARED_LIBRARY)
+ 
+ $(call import-module,android/native_app_glue)
+diff -ur native-activity-original/jni/main.c native-activity/jni/main.c
+--- native-activity-original/jni/main.c	2011-04-30 19:27:38.000000000 +0200
++++ native-activity/jni/main.c	2011-04-30 19:33:41.000000000 +0200
+@@ -160,6 +160,7 @@
+     engine->display = EGL_NO_DISPLAY;
+     engine->context = EGL_NO_CONTEXT;
+     engine->surface = EGL_NO_SURFACE;
++    moncleanup();
+ }
+ 
+ /**
+@@ -234,6 +235,8 @@
+     // Make sure glue isn't stripped.
+     app_dummy();
+ 
++    monstartup("native-activity.so");
++
+     memset(&engine, 0, sizeof(engine));
+     state->userData = &engine;
+     state->onAppCmd = engine_handle_cmd;
