@@ -131,11 +131,11 @@ static int profWrite(FILE *f, char *buf, unsigned int n)
 	return 0;
 }
 
-static void check_profil(long frompcindex)
+static void check_profil(uint32_t frompcindex)
 {
 	if (sbuf && ssiz) {
 		uint16_t *b = (uint16_t *)sbuf;
-		int pc = ((frompcindex - (long)s_lowpc) * s_scale)/SCALE_1_TO_1;
+		int pc = (frompcindex - s_lowpc) / s_scale;
 		if(pc >= 0 && pc < ssiz)
 			b[pc]++;
 	}
@@ -182,7 +182,6 @@ void monstartup(const char *libname)
 {
 	int monsize;
 	char *buffer;
-	int o;
 	uint32_t lowpc, highpc;
 	FILE *self = fopen("/proc/self/smaps", "r");
 	s_smaps = read_smaps(self, libname);
@@ -207,6 +206,7 @@ void monstartup(const char *libname)
 	s_highpc = highpc;
 	s_textsize = highpc - lowpc;
 	monsize = (s_textsize / HISTFRACTION);
+	s_scale = HISTFRACTION;
 	buffer = calloc(1, 2 * monsize);
 	if (buffer == NULL) {
 		systemMessage(0, MSG);
@@ -241,12 +241,6 @@ void monstartup(const char *libname)
 	ssiz = monsize;
 	if (monsize <= 0) {
 		return;
-	}
-	o = highpc - lowpc;
-	if (monsize < o) {
-		s_scale = (int)(((float) monsize / o) * SCALE_1_TO_1);
-	} else {
-		s_scale = SCALE_1_TO_1;
 	}
 	profControl(1);
 }
