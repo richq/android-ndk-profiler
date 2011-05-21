@@ -1,0 +1,58 @@
+This patch adds profiling to the freeciv android port client library. The
+gmon.out file is generated when you save the game (Menu > Save, in game).
+
+Index: jni/freeciv/client/javaharness/client.c
+===================================================================
+--- jni/freeciv/client/javaharness/client.c	(revision 3)
++++ jni/freeciv/client/javaharness/client.c	(working copy)
+@@ -260,6 +260,7 @@
+ 
+ 	update_tileset_progress = (*env_nh)->GetMethodID(env_nh, cls, "updateTilesetProgress", "(Ljava/lang/String;)V");
+ 
++	monstartup("client.so");
+ 
+ 
+ 	if (draw_frame == 0) {
+@@ -1398,6 +1399,7 @@
+ JNIEXPORT void JNICALL Java_net_hackcasual_freeciv_NativeHarness_save
+   (JNIEnv * env, jobject obj) {
+ 	send_chat("/save");
++	moncleanup();
+ }
+ 
+ JNIEXPORT void JNICALL Java_net_hackcasual_freeciv_NativeHarness_exercise1
+Index: jni/freeciv/client/Android.mk
+===================================================================
+--- jni/freeciv/client/Android.mk	(revision 3)
++++ jni/freeciv/client/Android.mk	(working copy)
+@@ -10,9 +10,19 @@
+ #   GNU General Public License for more details.
+ 
+ LOCAL_PATH := $(call my-dir)
++# remove -ffunction-sections and -fomit-frame-pointer from the default compile flags
++TARGET_thumb_release_CFLAGS := $(filter-out -ffunction-sections,$(TARGET_thumb_release_CFLAGS))
++TARGET_thumb_release_CFLAGS := $(filter-out -fomit-frame-pointer,$(TARGET_thumb_release_CFLAGS))
++TARGET_CFLAGS := $(filter-out -ffunction-sections,$(TARGET_CFLAGS))
+ 
++# include libandprof.a in the build
+ include $(CLEAR_VARS)
++LOCAL_MODULE := andprof_client
++LOCAL_SRC_FILES := $(TARGET_ARCH_ABI)/libandprof.a
++include $(PREBUILT_STATIC_LIBRARY)
+ 
++include $(CLEAR_VARS)
++
+ LOCAL_MODULE := client
+ 
+ CG_SUBDIRS := \
+@@ -62,5 +72,8 @@
+ LOCAL_STATIC_LIBRARIES := common utility png  
+ 
+ LOCAL_LDLIBS := -lz -llog -lGLESv1_CM
++# compile with profiling
++LOCAL_CFLAGS += -pg
++LOCAL_STATIC_LIBRARIES += andprof_client
+ 
+-include $(BUILD_SHARED_LIBRARY)
+\ No newline at end of file
++include $(BUILD_SHARED_LIBRARY)
