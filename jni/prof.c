@@ -193,7 +193,7 @@ void monstartup(const char *libname)
 	lowpc = s_smaps->lo;
 	highpc = s_smaps->hi;
 	__android_log_print(ANDROID_LOG_INFO, "PROFILING",
-			"Proflie %s %x-%x: %d",
+			"Profile %s %x-%x: %d",
 			libname,
 			lowpc, highpc,
 			s_smaps->base);
