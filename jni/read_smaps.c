@@ -10,8 +10,8 @@ void free_smaps(struct smap *s)
     struct smap *next = s->next;
     while (next != NULL) {
         struct smap *tmp = next;
-        free(tmp);
         next = next->next;
+        free(tmp);
     }
     free(s);
 }
