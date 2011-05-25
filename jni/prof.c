@@ -340,7 +340,7 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		return;
 	}
 	profiling++;
-	s_pc = (long)frompcindex;
+	s_pc = (long)selfpc;
 	/*
 	 * check that frompcindex is a reasonable pc value.
 	 * for example: signal catchers get called from the stack,
