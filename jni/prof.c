@@ -48,6 +48,8 @@
  */
 
 #include <android/log.h>
+#include <errno.h>
+#include <linux/ptrace.h>
 #include <memory.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -58,6 +60,8 @@
 #include "gmon_out.h"
 #include "prof.h"
 #include "read_smaps.h"
+
+#define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "PROFILING", __VA_ARGS__)
 
 /*
  * froms is actually a bunch of unsigned shorts indexing tos
@@ -87,8 +91,7 @@ volatile long s_pc;
 
 static void systemMessage(int a, const char *msg)
 {
-	__android_log_print(ANDROID_LOG_INFO, "PROFILING", "%d: %s", a,
-			    msg);
+	LOGI("%d: %s", a, msg);
 }
 
 static void profPut32(char *b, uint32_t v)
@@ -157,6 +160,57 @@ static void *run_profil(void *ptr)
 	return NULL;
 }
 
+static void do_child_process(void)
+{
+	/* parent is the original process to be monitored */
+	struct pt_regs uregs;
+	int status;
+	pid_t pid = getppid();
+	systemMessage(0, "child: attach");
+	if (ptrace(PTRACE_ATTACH, pid, NULL, NULL) < 0) {
+		LOGI("child: could not attach %d (%d)", pid, errno);
+		exit(0);
+	}
+	systemMessage(0, "child: wait for parent to stop");
+	waitpid(pid, &status, 0);
+	systemMessage(0, "child: parent continues");
+	ptrace(PTRACE_CONT, pid, NULL, NULL);
+	while (profiling != 3) {
+		/*systemMessage(0, "child: signal parent stop");*/
+		kill(pid, SIGINT);
+		/*systemMessage(0, "child: wait for parent to stop");*/
+		waitpid(pid, &status, 0);
+		/*systemMessage(0, "child: fetch registers");*/
+		if (ptrace(PTRACE_GETREGS, pid, 0, &uregs) < 0) {
+			LOGI("could not get regs of %d (%d)", pid, errno);
+			ptrace(PTRACE_DETACH, pid, 0, 0);
+			break;
+		}
+		long pc = instruction_pointer(&uregs);
+		if (ptrace(PTRACE_POKEDATA, pid, &s_pc, pc) < 0) {
+			LOGI("could not poke data for %d (%d)", pid, errno);
+			ptrace(PTRACE_DETACH, pid, 0, 0);
+			break;
+		}
+		if (ptrace(PTRACE_PEEKDATA, pid, &profiling, NULL) < 0) {
+			LOGI("could not peek data for %d (%d)", pid, errno);
+			ptrace(PTRACE_DETACH, pid, 0, 0);
+			systemMessage(1, "child: detached from parent");
+			break;
+		}
+		if (ptrace(PTRACE_CONT, pid, 0, 0) < 0) {
+			LOGI("child: could not continue %d (%d)", pid, errno);
+			break;
+		}
+		struct timespec req;
+		req.tv_sec = 0;
+		req.tv_nsec = 1e7;
+		nanosleep(&req, NULL);
+	}
+	LOGI("child: finished monitoring");
+	exit(0);
+}
+
 /* Control profiling;
    profiling is what mcount checks to see if
    all the data structures are ready.  */
@@ -167,11 +221,17 @@ static void profControl(int mode)
 		/* start */
 		profiling = 0;
 		s_pc = 0;
-		pthread_create(&s_runner, NULL, run_profil, NULL);
+		pid_t pid = fork();
+		if (pid == 0) {
+			do_child_process();
+		} else {
+			systemMessage(0, "parent: carrying on");
+			pthread_create(&s_runner, NULL, run_profil, NULL);
+		}
 	} else {
 		/* stop */
 		profiling = 3;
-		systemMessage(1, "stopping profile thread");
+		systemMessage(1, "parent: done profiling");
 		pthread_join(s_runner, NULL);
 	}
 }
@@ -253,8 +313,9 @@ void moncleanup(void)
 	uint32_t frompc;
 	int toindex;
 	struct gmon_hdr ghdr;
+	LOGI("parent: moncleanup called");
 	profControl(0);
-	systemMessage(1, "writing gmon.out");
+	LOGI("writing gmon.out");
 	fd = fopen("/sdcard/gmon.out", "wb");
 	if (fd == NULL) {
 		systemMessage(0, "mcount: gmon.out");
