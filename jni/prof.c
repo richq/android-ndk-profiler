@@ -47,16 +47,16 @@
  * SUCH DAMAGE.
  */
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <stdio.h>
+#include <android/log.h>
 #include <memory.h>
 #include <pthread.h>
-#include <android/log.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
-#include "prof.h"
 #include "gmon.h"
 #include "gmon_out.h"
+#include "prof.h"
 #include "read_smaps.h"
 
 /*
