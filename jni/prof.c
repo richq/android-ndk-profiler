@@ -192,12 +192,7 @@ static void do_child_process(void)
 			ptrace(PTRACE_DETACH, pid, 0, 0);
 			break;
 		}
-		if (ptrace(PTRACE_PEEKDATA, pid, &profiling, NULL) < 0) {
-			LOGI("could not peek data for %d (%d)", pid, errno);
-			ptrace(PTRACE_DETACH, pid, 0, 0);
-			systemMessage(1, "child: detached from parent");
-			break;
-		}
+		profiling = ptrace(PTRACE_PEEKDATA, pid, &profiling, NULL);
 		if (ptrace(PTRACE_CONT, pid, 0, 0) < 0) {
 			LOGI("child: could not continue %d (%d)", pid, errno);
 			break;
