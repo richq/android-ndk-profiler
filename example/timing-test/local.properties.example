@@ -1,0 +1,2 @@
+sdk.dir = ~/tools/android-sdk-linux_86/
+ndk.dir = ~/tools/android-ndk-r5b/

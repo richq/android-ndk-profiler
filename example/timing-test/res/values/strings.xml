@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Timing Test</string>
+    <string name="monstart">Start Profiler</string>
+    <string name="native_call">Native Call</string>
+    <string name="moncleanup">Stop Profiler</string>
+</resources>
