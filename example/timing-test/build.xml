@@ -1,29 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="TimingTest" default="debug">
 
-<!-- The local.properties file should *NOT* be checked into Version Control Systems. -->
+    <!-- local.properties: for ndk.dir and sdk.dir (see local.properties.example) -->
     <property file="local.properties" />
 
-    <!-- The build.properties file
-         should be checked into Version Control Systems.  -->
-    <property file="build.properties" />
-
-    <!-- The default.properties should be checked into Version Control Systems. -->
     <property file="default.properties" />
 
-
-    <!-- Required pre-setup import -->
     <import file="${sdk.dir}/tools/ant/pre_setup.xml" />
 
-
-<!-- extension targets. Uncomment the ones where you want to do custom work
-     in between standard targets -->
     <target name="-pre-build">
-        <exec executable="${ndk.dir}/ndk-build"/>
         <copy todir="jni/armeabi">
             <fileset dir="../../obj/local/armeabi/"/>
         </copy>
-
+        <exec executable="${ndk.dir}/ndk-build"/>
     </target>
     <setup />
 
