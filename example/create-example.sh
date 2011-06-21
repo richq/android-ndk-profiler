@@ -38,6 +38,7 @@ if [ ! -d native-activity ] ; then
     patch -i native-activity.patch -p0 || die "Could not patch native-activity for profiling"
     # copy the profiling library there
     cp ../obj/local/armeabi/ -r native-activity/jni || die "Unable to copy the armeabi profiling code"
+    cp ../android-ndk-profiler.mk native-activity/jni || die "Unable to copy makefile snippet"
 fi
 
 # build

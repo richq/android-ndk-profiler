@@ -13,21 +13,11 @@ diff -ur native-activity-original/AndroidManifest.xml native-activity/AndroidMan
 diff -ur native-activity-original/jni/Android.mk native-activity/jni/Android.mk
 --- native-activity-original/jni/Android.mk	2011-04-30 19:27:38.000000000 +0200
 +++ native-activity/jni/Android.mk	2011-04-30 19:31:16.000000000 +0200
-@@ -14,6 +14,18 @@
+@@ -14,6 +14,8 @@
  #
  LOCAL_PATH := $(call my-dir)
  
-+# remove -ffunction-sections and -fomit-frame-pointer from the default compile flags
-+TARGET_thumb_release_CFLAGS := $(filter-out -ffunction-sections,$(TARGET_thumb_release_CFLAGS))
-+TARGET_thumb_release_CFLAGS := $(filter-out -fomit-frame-pointer,$(TARGET_thumb_release_CFLAGS))
-+TARGET_CFLAGS := $(filter-out -ffunction-sections,$(TARGET_CFLAGS))
-+
-+# include libandprof.a in the build
-+include $(CLEAR_VARS)
-+LOCAL_MODULE := andprof
-+LOCAL_SRC_FILES := $(TARGET_ARCH_ABI)/libandprof.a
-+include $(PREBUILT_STATIC_LIBRARY)
-+
++include $(LOCAL_PATH)/android-ndk-profiler.mk
 +
  include $(CLEAR_VARS)
  
