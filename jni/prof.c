@@ -81,7 +81,7 @@ static int s_scale;
 static int hist_num_bins = 0;
 static char hist_dimension[16] = "seconds";
 static char hist_dimension_abbrev = 's';
-struct smap *s_smaps = NULL;
+struct smap *s_maps = NULL;
 static pthread_t s_runner;
 volatile long s_pc;
 
@@ -238,19 +238,19 @@ void monstartup(const char *libname)
 	int monsize;
 	char *buffer;
 	uint32_t lowpc, highpc;
-	FILE *self = fopen("/proc/self/smaps", "r");
-	s_smaps = read_smaps(self, libname);
-	if (s_smaps == NULL) {
-		systemMessage(0, "No smaps found");
+	FILE *self = fopen("/proc/self/maps", "r");
+	s_maps = read_smaps(self, libname);
+	if (s_maps == NULL) {
+		systemMessage(0, "No maps found");
 		return;
 	}
-	lowpc = s_smaps->lo;
-	highpc = s_smaps->hi;
+	lowpc = s_maps->lo;
+	highpc = s_maps->hi;
 	__android_log_print(ANDROID_LOG_INFO, "PROFILING",
 			"Profile %s %x-%x: %d",
 			libname,
 			lowpc, highpc,
-			s_smaps->base);
+			s_maps->base);
 	/*
 	 * round lowpc and highpc to multiples of the density we're using
 	 * so the rest of the scaling (here and in gprof) stays in ints.
@@ -325,8 +325,8 @@ void moncleanup(void)
 	}
 	hist_num_bins = ssiz;
 	if (profWrite8(fd, GMON_TAG_TIME_HIST) ||
-	    profWrite32(fd, get_real_address(s_smaps, (uint32_t) s_lowpc)) ||
-	    profWrite32(fd, get_real_address(s_smaps, (uint32_t) s_highpc)) ||
+	    profWrite32(fd, get_real_address(s_maps, (uint32_t) s_lowpc)) ||
+	    profWrite32(fd, get_real_address(s_maps, (uint32_t) s_highpc)) ||
 	    profWrite32(fd, hist_num_bins) ||
 	    profWrite32(fd, FREQ_HZ) ||
 	    profWrite(fd, hist_dimension, 15) ||
@@ -353,13 +353,13 @@ void moncleanup(void)
 		}
 		frompc =
 			s_lowpc + (fromindex * HASHFRACTION * sizeof(*froms));
-		frompc = get_real_address(s_smaps, frompc);
+		frompc = get_real_address(s_maps, frompc);
 		for (toindex = froms[fromindex]; toindex != 0;
 		     toindex = tos[toindex].link) {
 			if (profWrite8(fd, GMON_TAG_CG_ARC)
 			    || profWrite32(fd, (uint32_t) frompc)
 			    || profWrite32(fd,
-					   get_real_address(s_smaps,
+					   get_real_address(s_maps,
 							    (uint32_t)
 							    tos[toindex].
 							    selfpc))
