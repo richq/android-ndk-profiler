@@ -11,6 +11,7 @@ dist: andprof
 	cp -pv jni/prof.h andprof
 	cp -pv obj/local/armeabi/*.a andprof/armeabi
 	cp -pv obj/local/armeabi-v7a/*.a andprof/armeabi-v7a
+	cp android-ndk-profiler.mk andprof
 	tar czvf andprof.tar.gz andprof
 	cd andprof && zip -r ../android-ndk-profiler.zip *
 	cd ..
