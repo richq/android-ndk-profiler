@@ -12,7 +12,9 @@
         <copy todir="jni/armeabi">
             <fileset dir="../../obj/local/armeabi/"/>
         </copy>
-        <exec executable="${ndk.dir}/ndk-build"/>
+        <exec executable="${ndk.dir}/ndk-build">
+            <arg value="NDK_DEBUG=1"/>
+        </exec>
     </target>
     <setup />
 
