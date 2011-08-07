@@ -1,5 +1,5 @@
 
-NDK ?= $(HOME)/tools/android-ndk-r5b/
+NDK ?= $(HOME)/tools/android-ndk-r6
 
 .PHONY: andprof dist check clean
 
