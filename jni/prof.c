@@ -47,19 +47,18 @@
  * SUCH DAMAGE.
  */
 
-#include <android/log.h>
-#include <errno.h>
-#include <linux/ptrace.h>
-#include <memory.h>
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include <android/log.h>    /* for __android_log_print, ANDROID_LOG_INFO, etc */
+#include <errno.h>          /* for errno */
+#include <stdio.h>          /* for FILE */
+#include <signal.h>         /* for sigaction, etc */
+#include <sys/time.h>       /* for setitimer, etc */
+#include <stdint.h>         /* for uint32_t, uint16_t, etc */
 
 #include "gmon.h"
 #include "gmon_out.h"
 #include "prof.h"
 #include "read_smaps.h"
+#include "ucontext.h"       /* for mcontext_t, etc */
 
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "PROFILING", __VA_ARGS__)
 
@@ -82,8 +81,6 @@ static int hist_num_bins = 0;
 static char hist_dimension[16] = "seconds";
 static char hist_dimension_abbrev = 's';
 struct smap *s_maps = NULL;
-static pthread_t s_runner;
-volatile long s_pc;
 
 /* see profil(2) where this is describe (incorrectly) */
 #define  SCALE_1_TO_1 0x10000L
@@ -144,67 +141,44 @@ static void check_profil(uint32_t frompcindex)
 	}
 }
 
-static void *run_profil(void *ptr)
+static void profile_action(int sig, siginfo_t *info, void *context)
 {
-	do {
-		struct timespec req;
-		long pc = s_pc;
-		if (pc)
-			check_profil(pc);
-		/* sleep for 1/100th of a second */
-		req.tv_sec = 0;
-		req.tv_nsec = 1e7;
-		nanosleep(&req, NULL);
-	} while (profiling != 3);
-	pthread_exit(NULL);
-	return NULL;
+	ucontext_t *ucontext = (ucontext_t*) context;
+	struct sigcontext *mcontext = &ucontext->uc_mcontext;
+	if (profiling)
+		return;
+	check_profil(mcontext->arm_pc);
 }
 
-static void do_child_process(void)
+static void add_profile_handler(void)
 {
-	/* parent is the original process to be monitored */
-	struct pt_regs uregs;
-	int status;
-	pid_t pid = getppid();
-	systemMessage(0, "child: attach");
-	if (ptrace(PTRACE_ATTACH, pid, NULL, NULL) < 0) {
-		LOGI("child: could not attach %d (%d)", pid, errno);
-		exit(0);
+
+	struct sigaction action;
+	/* request info, sigaction called instead of sighandler */
+	action.sa_flags = SA_SIGINFO | SA_RESTART;
+	action.sa_sigaction = profile_action;
+	sigemptyset(&action.sa_mask);
+	int result = sigaction(SIGPROF, &action, NULL);
+	if (result != 0) {
+		/* panic */
+		LOGI("add_profile_handler, sigaction failed %d %d", result, errno);
+		return;
 	}
-	systemMessage(0, "child: wait for parent to stop");
-	waitpid(pid, &status, 0);
-	systemMessage(0, "child: parent continues");
-	ptrace(PTRACE_CONT, pid, NULL, NULL);
-	while (profiling != 3) {
-		/*systemMessage(0, "child: signal parent stop");*/
-		kill(pid, SIGINT);
-		/*systemMessage(0, "child: wait for parent to stop");*/
-		waitpid(pid, &status, 0);
-		/*systemMessage(0, "child: fetch registers");*/
-		if (ptrace(PTRACE_GETREGS, pid, 0, &uregs) < 0) {
-			LOGI("could not get regs of %d (%d)", pid, errno);
-			ptrace(PTRACE_DETACH, pid, 0, 0);
-			break;
-		}
-		long pc = instruction_pointer(&uregs);
-		if (ptrace(PTRACE_POKEDATA, pid, &s_pc, pc) < 0) {
-			LOGI("could not poke data for %d (%d)", pid, errno);
-			ptrace(PTRACE_DETACH, pid, 0, 0);
-			break;
-		}
-		profiling = ptrace(PTRACE_PEEKDATA, pid, &profiling, NULL);
-		if (ptrace(PTRACE_CONT, pid, 0, 0) < 0) {
-			LOGI("child: could not continue %d (%d)", pid, errno);
-			break;
-		}
-		struct timespec req;
-		req.tv_sec = 0;
-		req.tv_nsec = 1e7;
-		nanosleep(&req, NULL);
-	}
-	LOGI("child: finished monitoring");
-	exit(0);
+
+	struct itimerval timer;
+	timer.it_interval.tv_sec = 0;
+	timer.it_interval.tv_usec = 1000000 / FREQ_HZ;
+	timer.it_value = timer.it_interval;
+	setitimer(ITIMER_PROF, &timer, 0);
 }
+
+static void remove_profile_handler(void)
+{
+	struct itimerval timer;
+	memset(&timer, 0, sizeof(timer));
+	setitimer(ITIMER_PROF, &timer, 0);
+}
+
 
 /* Control profiling;
    profiling is what mcount checks to see if
@@ -214,20 +188,13 @@ static void profControl(int mode)
 {
 	if (mode) {
 		/* start */
+		add_profile_handler();
 		profiling = 0;
-		s_pc = 0;
-		pid_t pid = fork();
-		if (pid == 0) {
-			do_child_process();
-		} else {
-			systemMessage(0, "parent: carrying on");
-			pthread_create(&s_runner, NULL, run_profil, NULL);
-		}
 	} else {
+		remove_profile_handler();
 		/* stop */
 		profiling = 3;
 		systemMessage(1, "parent: done profiling");
-		pthread_join(s_runner, NULL);
 	}
 }
 
@@ -396,7 +363,6 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		return;
 	}
 	profiling++;
-	s_pc = (long)selfpc;
 	/*
 	 * check that frompcindex is a reasonable pc value.
 	 * for example: signal catchers get called from the stack,
