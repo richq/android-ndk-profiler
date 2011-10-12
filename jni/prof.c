@@ -49,10 +49,11 @@
 
 #include <android/log.h>    /* for __android_log_print, ANDROID_LOG_INFO, etc */
 #include <errno.h>          /* for errno */
-#include <stdio.h>          /* for FILE */
 #include <signal.h>         /* for sigaction, etc */
-#include <sys/time.h>       /* for setitimer, etc */
 #include <stdint.h>         /* for uint32_t, uint16_t, etc */
+#include <stdio.h>          /* for FILE */
+#include <stdlib.h>         /* for getenv */
+#include <sys/time.h>       /* for setitimer, etc */
 
 #include "gmon.h"
 #include "gmon_out.h"
@@ -61,6 +62,8 @@
 #include "ucontext.h"       /* for mcontext_t, etc */
 
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "PROFILING", __VA_ARGS__)
+#define FREQ_HZ 100
+#define DEFAULT_GMON_OUT "/sdcard/gmon.out"
 
 /*
  * froms is actually a bunch of unsigned shorts indexing tos
@@ -81,10 +84,7 @@ static int hist_num_bins = 0;
 static char hist_dimension[16] = "seconds";
 static char hist_dimension_abbrev = 's';
 struct smap *s_maps = NULL;
-
-/* see profil(2) where this is describe (incorrectly) */
-#define  SCALE_1_TO_1 0x10000L
-#define  FREQ_HZ 100
+static int s_freq_hz = FREQ_HZ;
 
 static void systemMessage(int a, const char *msg)
 {
@@ -167,7 +167,7 @@ static void add_profile_handler(void)
 
 	struct itimerval timer;
 	timer.it_interval.tv_sec = 0;
-	timer.it_interval.tv_usec = 1000000 / FREQ_HZ;
+	timer.it_interval.tv_usec = 1000000 / s_freq_hz;
 	timer.it_value = timer.it_interval;
 	setitimer(ITIMER_PROF, &timer, 0);
 }
@@ -198,6 +198,18 @@ static void profControl(int mode)
 	}
 }
 
+static void get_frequency(void)
+{
+	char *freq = getenv("CPUPROFILER_FREQUENCY");
+	if (freq != 0) {
+		int freqval = strtol(freq, 0, 0);
+		if (freqval > 0)
+			s_freq_hz = freqval;
+		else
+			LOGI("Invalid frequency value: %d", freqval);
+	}
+}
+
 #define MSG ("No space for profiling buffer(s)\n")
 
 void monstartup(const char *libname)
@@ -218,6 +230,8 @@ void monstartup(const char *libname)
 			libname,
 			lowpc, highpc,
 			s_maps->base);
+
+	get_frequency();
 	/*
 	 * round lowpc and highpc to multiples of the density we're using
 	 * so the rest of the scaling (here and in gprof) stays in ints.
@@ -267,6 +281,14 @@ void monstartup(const char *libname)
 	profControl(1);
 }
 
+static const char *get_gmon_out(void)
+{
+	char *gmon_out = getenv("CPUPROFILE");
+	if (gmon_out && strlen(gmon_out))
+		return gmon_out;
+	return DEFAULT_GMON_OUT;
+}
+
 void moncleanup(void)
 {
 	FILE *fd;
@@ -275,10 +297,11 @@ void moncleanup(void)
 	uint32_t frompc;
 	int toindex;
 	struct gmon_hdr ghdr;
+	const char *gmon_name = get_gmon_out();
 	LOGI("parent: moncleanup called");
 	profControl(0);
 	LOGI("writing gmon.out");
-	fd = fopen("/sdcard/gmon.out", "wb");
+	fd = fopen(gmon_name, "wb");
 	if (fd == NULL) {
 		systemMessage(0, "mcount: gmon.out");
 		return;
@@ -295,7 +318,7 @@ void moncleanup(void)
 	    profWrite32(fd, get_real_address(s_maps, (uint32_t) s_lowpc)) ||
 	    profWrite32(fd, get_real_address(s_maps, (uint32_t) s_highpc)) ||
 	    profWrite32(fd, hist_num_bins) ||
-	    profWrite32(fd, FREQ_HZ) ||
+	    profWrite32(fd, s_freq_hz) ||
 	    profWrite(fd, hist_dimension, 15) ||
 	    profWrite(fd, &hist_dimension_abbrev, 1)) {
 		systemMessage(0, "mcount: gmon.out hist");
