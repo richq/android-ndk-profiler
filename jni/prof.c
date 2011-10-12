@@ -200,7 +200,7 @@ static void profControl(int mode)
 
 static void get_frequency(void)
 {
-	char *freq = getenv("CPUPROFILER_FREQUENCY");
+	char *freq = getenv("CPUPROFILE_FREQUENCY");
 	if (freq != 0) {
 		int freqval = strtol(freq, 0, 0);
 		if (freqval > 0)
