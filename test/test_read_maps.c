@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include "read_smaps.h"
+#include "read_maps.h"
 
-static void test_read_smaps(void)
+static void test_read_maps(void)
 {
-	FILE *fp = fopen("smaps.txt", "r");
-	struct smap *result = read_smaps(fp, "libc-2.11.1.so");
+	FILE *fp = fopen("maps.txt", "r");
+	struct proc_map *result = read_maps(fp, "libc-2.11.1.so");
 	fclose(fp);
 	assert(result != NULL);
 
@@ -14,7 +14,7 @@ static void test_read_smaps(void)
         assert(0x00b16000 == result->lo);
         assert(0x00c69000 == result->hi);
 
-	struct smap *next = result->next;
+	struct proc_map *next = result->next;
 	assert(next != NULL);
         assert(0x00153000 == next->base);
         assert(0x00c69000 == next->lo);
@@ -36,11 +36,11 @@ static void test_read_smaps(void)
 	unsigned int realaddr = get_real_address(result, fake);
 	assert(realaddr == 0x000f7e30);
 
-	free_smaps(result);
+	free_maps(result);
 }
 
 int main(int argc, const char *argv[])
 {
-	test_read_smaps();
+	test_read_maps();
 	return 0;
 }

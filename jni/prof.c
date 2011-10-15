@@ -58,7 +58,7 @@
 #include "gmon.h"
 #include "gmon_out.h"
 #include "prof.h"
-#include "read_smaps.h"
+#include "read_maps.h"
 #include "ucontext.h"       /* for mcontext_t, etc */
 
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "PROFILING", __VA_ARGS__)
@@ -83,7 +83,7 @@ static int s_scale;
 static int hist_num_bins = 0;
 static char hist_dimension[16] = "seconds";
 static char hist_dimension_abbrev = 's';
-struct smap *s_maps = NULL;
+struct proc_map *s_maps = NULL;
 static int s_freq_hz = FREQ_HZ;
 
 static void systemMessage(int a, const char *msg)
@@ -218,7 +218,7 @@ void monstartup(const char *libname)
 	char *buffer;
 	uint32_t lowpc, highpc;
 	FILE *self = fopen("/proc/self/maps", "r");
-	s_maps = read_smaps(self, libname);
+	s_maps = read_maps(self, libname);
 	if (s_maps == NULL) {
 		systemMessage(0, "No maps found");
 		return;

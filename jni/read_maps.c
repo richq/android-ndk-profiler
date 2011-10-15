@@ -1,25 +1,25 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "read_smaps.h"
+#include "read_maps.h"
 
 static char s_line[256];
 
-void free_smaps(struct smap *s)
+void free_maps(struct proc_map *s)
 {
-    struct smap *next = s->next;
+    struct proc_map *next = s->next;
     while (next != NULL) {
-        struct smap *tmp = next;
+        struct proc_map *tmp = next;
         next = next->next;
         free(tmp);
     }
     free(s);
 }
 
-struct smap *read_smaps(FILE *fp, const char *lname)
+struct proc_map *read_maps(FILE *fp, const char *lname)
 {
-    struct smap *results = NULL;
-    struct smap *current = NULL;
+    struct proc_map *results = NULL;
+    struct proc_map *current = NULL;
     size_t namelen = strlen(lname);
     while (fgets(s_line, sizeof(s_line), fp) != NULL) {
         size_t len = strlen(s_line);
@@ -31,11 +31,11 @@ struct smap *read_smaps(FILE *fp, const char *lname)
             int lo, base, hi;
             sscanf(s_line, "%x-%x %4c %x %c", &lo, &hi, perm, &base, c);
             if (results == NULL) {
-                current = malloc(sizeof(struct smap));
+                current = malloc(sizeof(struct proc_map));
                 current->next = NULL;
                 results = current;
             } else {
-                current->next = malloc(sizeof(struct smap));
+                current->next = malloc(sizeof(struct proc_map));
                 current = current->next;
                 current->next = NULL;
             }
@@ -47,9 +47,9 @@ struct smap *read_smaps(FILE *fp, const char *lname)
     return results;
 }
 
-unsigned int get_real_address(const struct smap *smaps, unsigned int fake)
+unsigned int get_real_address(const struct proc_map *maps, unsigned int fake)
 {
-    const struct smap *mp = smaps;
+    const struct proc_map *mp = maps;
     while (mp) {
         if (fake >= mp->lo && fake <= mp->hi) {
             return fake - mp->lo;
