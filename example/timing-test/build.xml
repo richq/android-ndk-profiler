@@ -14,6 +14,7 @@
         </copy>
         <exec executable="${ndk.dir}/ndk-build">
             <arg value="NDK_DEBUG=1"/>
+            <arg value="V=1"/>
         </exec>
     </target>
     <setup />
