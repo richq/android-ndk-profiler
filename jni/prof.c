@@ -83,7 +83,7 @@ static int s_scale;
 static int hist_num_bins = 0;
 static char hist_dimension[16] = "seconds";
 static char hist_dimension_abbrev = 's';
-struct proc_map *s_maps = NULL;
+static struct proc_map *s_maps = NULL;
 static int s_freq_hz = FREQ_HZ;
 
 static void systemMessage(int a, const char *msg)
@@ -212,6 +212,7 @@ static void get_frequency(void)
 
 #define MSG ("No space for profiling buffer(s)\n")
 
+__attribute__((visibility("default")))
 void monstartup(const char *libname)
 {
 	int monsize;
@@ -289,6 +290,7 @@ static const char *get_gmon_out(void)
 	return DEFAULT_GMON_OUT;
 }
 
+__attribute__((visibility("default")))
 void moncleanup(void)
 {
 	FILE *fd;
