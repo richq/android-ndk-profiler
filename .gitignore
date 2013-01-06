@@ -1,0 +1,21 @@
+
+# /
+/obj
+
+# /example/
+/example/native-activity
+
+# /example/timing-test/
+/example/timing-test/bin
+/example/timing-test/gen
+/example/timing-test/obj
+/example/timing-test/local.properties
+/example/timing-test/libs
+/example/timing-test/gmon.out
+
+# /example/timing-test/jni/
+/example/timing-test/jni/armeabi
+/example/timing-test/jni/objs
+
+# /test/
+/test/test
