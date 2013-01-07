@@ -1,0 +1,3 @@
+Profile Android NDK code. Further instructions here:
+
+http://code.google.com/p/android-ndk-profiler/wiki/Usage
