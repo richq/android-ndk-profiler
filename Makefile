@@ -14,7 +14,7 @@ endif
 PROJECT=android-ndk-profiler
 
 andprof:
-	$(NDK)/ndk-build andprof V=1
+	$(NDK)/ndk-build $(PROJECT) V=1
 
 ifeq ($(VERSION),)
 dist:
@@ -25,14 +25,13 @@ srcdist:
 	@exit 1
 else
 dist: andprof
-	mkdir -p andprof/armeabi andprof/armeabi-v7a
-	cp -pv jni/prof.h andprof
-	cp -pv obj/local/armeabi/*.a andprof/armeabi
-	cp -pv obj/local/armeabi-v7a/*.a andprof/armeabi-v7a
-	cp android-ndk-profiler.mk andprof
-	cd andprof && zip -r ../$(PROJECT)-$(VERSION).zip *
-	cd ..
-	rm -rf andprof
+	mkdir -p $(PROJECT)/armeabi $(PROJECT)/armeabi-v7a
+	cp -pv jni/prof.h $(PROJECT)
+	cp -pv obj/local/armeabi/*.a $(PROJECT)/armeabi
+	cp -pv obj/local/armeabi-v7a/*.a $(PROJECT)/armeabi-v7a
+	cp android-ndk-profiler.mk $(PROJECT)/Android.mk
+	zip -r $(PROJECT)-$(VERSION).zip $(PROJECT)
+	rm -rf $(PROJECT)
 
 srcdist:
 	git archive --format=tar.gz --prefix=$(PROJECT)-$(VERSION)/ HEAD > $(PROJECT)-$(VERSION).tar.gz
