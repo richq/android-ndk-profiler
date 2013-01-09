@@ -60,7 +60,7 @@
 #include "gmon_out.h"
 #include "prof.h"
 #include "read_maps.h"
-#include "ucontext.h"       /* for mcontext_t, etc */
+#include "ucontext.h"       /* for ucontext_t */
 
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "PROFILING", __VA_ARGS__)
 #define FREQ_HZ 100
