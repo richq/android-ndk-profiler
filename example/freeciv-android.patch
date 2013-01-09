@@ -1,10 +1,12 @@
 This patch adds profiling to the freeciv android port client library. The
 gmon.out file is generated when you save the game (Menu > Save, in game).
 
-Index: jni/freeciv/client/javaharness/client.c
+https://code.google.com/p/freeciv-android/
+
+Index: freeciv-android/jni/freeciv/client/javaharness/client.c
 ===================================================================
---- jni/freeciv/client/javaharness/client.c	(revision 3)
-+++ jni/freeciv/client/javaharness/client.c	(working copy)
+--- freeciv-android/jni/freeciv/client/javaharness/client.c	(revision 3)
++++ freeciv-android/jni/freeciv/client/javaharness/client.c	(working copy)
 @@ -260,6 +260,7 @@
  
  	update_tileset_progress = (*env_nh)->GetMethodID(env_nh, cls, "updateTilesetProgress", "(Ljava/lang/String;)V");
@@ -21,38 +23,117 @@ Index: jni/freeciv/client/javaharness/client.c
  }
  
  JNIEXPORT void JNICALL Java_net_hackcasual_freeciv_NativeHarness_exercise1
-Index: jni/freeciv/client/Android.mk
+Index: freeciv-android/jni/freeciv/client/Android.mk
 ===================================================================
---- jni/freeciv/client/Android.mk	(revision 3)
-+++ jni/freeciv/client/Android.mk	(working copy)
-@@ -10,9 +10,19 @@
- #   GNU General Public License for more details.
- 
- LOCAL_PATH := $(call my-dir)
-+# remove -ffunction-sections and -fomit-frame-pointer from the default compile flags
-+TARGET_thumb_release_CFLAGS := $(filter-out -ffunction-sections,$(TARGET_thumb_release_CFLAGS))
-+TARGET_thumb_release_CFLAGS := $(filter-out -fomit-frame-pointer,$(TARGET_thumb_release_CFLAGS))
-+TARGET_CFLAGS := $(filter-out -ffunction-sections,$(TARGET_CFLAGS))
- 
-+# include libandprof.a in the build
- include $(CLEAR_VARS)
-+LOCAL_MODULE := andprof_client
-+LOCAL_SRC_FILES := $(TARGET_ARCH_ABI)/libandprof.a
-+include $(PREBUILT_STATIC_LIBRARY)
- 
-+include $(CLEAR_VARS)
-+
- LOCAL_MODULE := client
- 
- CG_SUBDIRS := \
-@@ -62,5 +72,8 @@
+--- freeciv-android/jni/freeciv/client/Android.mk	(revision 3)
++++ freeciv-android/jni/freeciv/client/Android.mk	(working copy)
+@@ -62,5 +72,9 @@
  LOCAL_STATIC_LIBRARIES := common utility png  
  
  LOCAL_LDLIBS := -lz -llog -lGLESv1_CM
 +# compile with profiling
 +LOCAL_CFLAGS += -pg
-+LOCAL_STATIC_LIBRARIES += andprof_client
++LOCAL_STATIC_LIBRARIES += android-ndk-profiler
  
 -include $(BUILD_SHARED_LIBRARY)
 \ No newline at end of file
 +include $(BUILD_SHARED_LIBRARY)
++$(call import-module,android-ndk-profiler)
+Index: AndroidManifest.xml
+===================================================================
+--- freeciv-android/AndroidManifest.xml	(revision 3)
++++ freeciv-android/AndroidManifest.xml	(working copy)
+@@ -40,4 +40,5 @@
+ 
+ 
+ <uses-permission android:name="android.permission.INTERNET"></uses-permission>
+-</manifest> 
+\ No newline at end of file
++    <uses-sdk android:minSdkVersion="4" />
++</manifest> 
+Index: custom_rules.xml
+===================================================================
+--- /dev/null	(revision 0)
++++ freeciv-android/custom_rules.xml	(revision 0)
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project name="custom" default="help">
++<target name="-pre-compile">
++    <path id="project.all.jars.path">
++        <path path="${toString:project.all.jars.path}"/>
++        <fileset dir="${jar.libs.dir}">
++            <include name="*.jar"/>
++        </fileset>
++    </path>
++</target>
++</project>
+Index: ant.properties
+===================================================================
+--- /dev/null	(revision 0)
++++ freeciv-android/ant.properties	(revision 0)
+@@ -0,0 +1 @@
++jar.libs.dir=lib
+Index: freeciv-android/jni/freeciv/utility/Android.mk
+===================================================================
+--- freeciv-android/jni/freeciv/utility/Android.mk	(revision 3)
++++ freeciv-android/jni/freeciv/utility/Android.mk	(working copy)
+@@ -33,8 +33,9 @@
+                 -DHAVE_SYS_UTSNAME_H \
+                 -DHAVE_GETTIMEOFDAY \
+                 -DHAVE_LIBZ
++LOCAL_CFLAGS += -pg
+                 								
+ 
+ LOCAL_LDLIBS := -lz
+ 
+-include $(BUILD_STATIC_LIBRARY)
+\ No newline at end of file
++include $(BUILD_STATIC_LIBRARY)
+Index: freeciv-android/jni/freeciv/server/Android.mk
+===================================================================
+--- freeciv-android/jni/freeciv/server/Android.mk	(revision 3)
++++ freeciv-android/jni/freeciv/server/Android.mk	(working copy)
+@@ -49,10 +49,13 @@
+                 -DHAVE_SYS_UTSNAME_H \
+                 -DHAVE_GETTIMEOFDAY \
+                 -DHAVE_LIBZ
++LOCAL_CFLAGS += -pg
+                 								
+ 
+ LOCAL_STATIC_LIBRARIES := lua tolua ai common utility
++LOCAL_STATIC_LIBRARIES += android-ndk-profiler
+ 
+ LOCAL_LDLIBS := -lz -llog
+ 
+-include $(BUILD_SHARED_LIBRARY)
+\ No newline at end of file
++include $(BUILD_SHARED_LIBRARY)
++$(call import-module,android-ndk-profiler)
+Index: freeciv-android/jni/freeciv/common/Android.mk
+===================================================================
+--- freeciv-android/jni/freeciv/common/Android.mk	(revision 3)
++++ freeciv-android/jni/freeciv/common/Android.mk	(working copy)
+@@ -38,7 +38,8 @@
+                 -DHAVE_SYS_UIO_H \
+                 -DHAVE_SYS_UTSNAME_H \
+                 -DHAVE_LIBZ
++LOCAL_CFLAGS += -pg
+                 
+ LOCAL_STATIC_LIBRARIES := utility
+                 								
+-include $(BUILD_STATIC_LIBRARY)
+\ No newline at end of file
++include $(BUILD_STATIC_LIBRARY)
+Index: freeciv-android/jni/freeciv/ai/Android.mk
+===================================================================
+--- freeciv-android/jni/freeciv/ai/Android.mk	(revision 3)
++++ freeciv-android/jni/freeciv/ai/Android.mk	(working copy)
+@@ -37,5 +37,6 @@
+                 -DHAVE_SYS_UIO_H \
+                 -DHAVE_SYS_UTSNAME_H \
+                 -DHAVE_LIBZ
++LOCAL_CFLAGS += -pg
+                 								
+-include $(BUILD_STATIC_LIBRARY)
+\ No newline at end of file
++include $(BUILD_STATIC_LIBRARY)

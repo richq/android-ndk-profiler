@@ -38,7 +38,7 @@ fi
 # copy example from ndk
 cp -r $ndk/samples/san-angeles/ . || die "Could not copy the example"
 # update the example to get the build files
-$android update project -p ./san-angeles -n com.example.SanAngeles --target android-8 || die "Unable to create build files for san-angeles"
+$android update project -p ./san-angeles -n com.example.SanAngeles --target android-10 || die "Unable to create build files for san-angeles"
 
 # patch the makefile so it has profiling
 sed -i 's/^include \$(BUILD.*$/LOCAL_CFLAGS += -pg\nLOCAL_STATIC_LIBRARIES := android-ndk-profiler\n&\n$(call import-module,android-ndk-profiler)/g' \
