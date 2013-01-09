@@ -1,3 +1,4 @@
+/* adapted from VisualBoyAdvance, which had the following notice.*/
 /* VisualBoyAdvance - Nintendo Gameboy/GameboyAdvance (TM) emulator.
  * Copyright (C) 1999-2003 Forgotten
  * Copyright (C) 2004 Forgotten and the VBA development team
