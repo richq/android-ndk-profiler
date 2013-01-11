@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="TimingTest_custom" default="-pre-build">
+    <target name="-pre-build">
+        <exec executable="${ndk.dir}/ndk-build" failonerror="true" >
+            <arg value="NDK_DEBUG=1"/>
+            <arg value="V=1"/>
+        </exec>
+    </target>
+</project>
