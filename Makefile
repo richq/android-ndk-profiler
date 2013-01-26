@@ -29,7 +29,7 @@ dist: andprof
 	cp -pv jni/prof.h $(PROJECT)
 	cp -pv obj/local/armeabi/*.a $(PROJECT)/armeabi
 	cp -pv obj/local/armeabi-v7a/*.a $(PROJECT)/armeabi-v7a
-	cp android-ndk-profiler.mk $(PROJECT)/Android.mk
+	cp jni/Android-module.mk $(PROJECT)/Android.mk
 	zip -r $(PROJECT)-$(VERSION).zip $(PROJECT)
 	rm -rf $(PROJECT)
 
