@@ -69,7 +69,6 @@
 /*
  * froms is actually a bunch of unsigned shorts indexing tos
  */
-//static int 		profiling 	= 3;
 static unsigned short *	froms;
 static struct tostruct*	tos 		= 0;
 static long 		tolimit 	= 0;
@@ -85,7 +84,6 @@ static int 	hist_num_bins 		= 0;
 static char 	hist_dimension[16] 	= "seconds";
 static char 	hist_dimension_abbrev 	= 's';
 static struct 	proc_map *s_maps 	= NULL;
-//static int 	s_freq_hz 		= FREQ_HZ;
 
 static void systemMessage(int a, const char *msg)
 {
@@ -132,20 +130,6 @@ static int profWrite(FILE *f, char *buf, unsigned int n)
 	return 0;
 }
 
-static void check_profil(uint32_t frompcindex)
-{
-	if (sbuf && ssiz) {
-		uint16_t *b = (uint16_t *)sbuf;
-		int pc = (frompcindex - s_lowpc) / s_scale;
-
-		if(pc >= 0 && pc < ssiz)
-		{
-			b[pc]++;
-		}
-	}
-}
-
-
 static int get_max_samples_per_sec()
 {
 	struct itimerval timer;
@@ -160,13 +144,20 @@ static int get_max_samples_per_sec()
 
 static void profile_action(int sig, siginfo_t *info, void *context)
 {
-	ucontext_t *ucontext = (ucontext_t*) context;
-	struct sigcontext *mcontext = &ucontext->uc_mcontext;
-	//if (profiling)
-	//{
-	//	return;
-	//}
-	check_profil(mcontext->arm_pc);
+	ucontext_t *ucontext 		= (ucontext_t*) context;
+	struct sigcontext *mcontext 	= &ucontext->uc_mcontext;
+	uint32_t frompcindex 		= mcontext->arm_pc;
+
+	if (sbuf && ssiz) 
+	{
+		uint16_t *b = (uint16_t *)sbuf;
+		int pc = (frompcindex - s_lowpc) / s_scale;
+
+		if(pc >= 0 && pc < ssiz)
+		{
+			b[pc]++;
+		}
+	}
 }
 
 static void add_profile_handler(int sample_freq)
@@ -200,26 +191,6 @@ static long remove_profile_handler(void)
 
 	return oldtimer.it_value.tv_usec;
 }
-
-/* Control profiling;
-   profiling is what mcount checks to see if
-   all the data structures are ready.  
-*/
-#if 0
-static void profControl(int mode)
-{
-	if (mode) {
-		/* start */
-		add_profile_handler();
-		profiling = 0;
-	} else {
-		remove_profile_handler();
-		/* stop */
-		profiling = 3;
-		systemMessage(1, "parent: done profiling");
-	}
-}
-#endif
 
 static int select_frequency()
 {
@@ -334,8 +305,6 @@ void monstartup(const char *libname)
 		return;
 	}
 
-	//profControl(1);
-	//profiling = 0;
 	add_profile_handler(sample_freq);	
 }
 
@@ -358,7 +327,6 @@ void moncleanup(void)
 	struct gmon_hdr ghdr;
 	const char *gmon_name = get_gmon_out();
 
-	//profControl(0);
 	long ival = remove_profile_handler();
 	int sample_freq = 1000000 / ival;
 
@@ -390,7 +358,6 @@ void moncleanup(void)
 	    profWrite32(fd, (uint32_t) s_lowpc) ||
 	    profWrite32(fd, (uint32_t) s_highpc) ||
 	    profWrite32(fd, hist_num_bins) ||
-	    //profWrite32(fd, s_freq_hz) ||
 	    profWrite32(fd, sample_freq) ||
 	    profWrite(fd, hist_dimension, 15) ||
 	    profWrite(fd, &hist_dimension_abbrev, 1)
@@ -462,11 +429,6 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 	 * and that we aren't recursively invoked.
 	 */
 
-	//if (profiling) {
-	//	return;
-	//}
-	//profiling++;
-
 	/*
 	 * check that frompcindex is a reasonable pc value.
 	 * for example: signal catchers get called from the stack,
@@ -493,7 +455,6 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		top->selfpc = selfpc;
 		top->count = 1;
 		top->link = 0;
-		//goto done;
 		return;
 	}
 	top = &tos[toindex];
@@ -502,7 +463,6 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		 * arc at front of chain; usual case.
 		 */
 		top->count++;
-		//goto done;
 		return;
 	}
 	/*
@@ -528,7 +488,6 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 			top->count = 1;
 			top->link = *frompcindex;
 			*frompcindex = (unsigned short) toindex;
-			//goto done;
 			return;
 		}
 		/*
@@ -547,18 +506,13 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 			prevtop->link = top->link;
 			top->link = *frompcindex;
 			*frompcindex = (unsigned short) toindex;
-			//goto done;
 			return;
 		}
 	}
-done:
-	//profiling--;
-	/* and fall through */
+
 out:
 	return;			/* normal return restores saved registers */
 overflow:
-	//profiling++;		/* halt further profiling */
-#define TOLIMIT "mcount: tos overflow\n"
-	systemMessage(0, TOLIMIT);
+	systemMessage(0, "mcount: tos overflow\n");
 	goto out;
 }
