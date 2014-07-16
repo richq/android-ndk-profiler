@@ -84,6 +84,7 @@ static int 	hist_num_bins 		= 0;
 static char 	hist_dimension[16] 	= "seconds";
 static char 	hist_dimension_abbrev 	= 's';
 static struct 	proc_map *s_maps 	= NULL;
+int		opt_is_shared_lib	= 0;
 
 static void systemMessage(int a, const char *msg)
 {
@@ -240,12 +241,24 @@ void monstartup(const char *libname)
 		return;
 	}
 
+	if (strstr(libname, ".so"))
+	{
+		LOGI("start profiling shared library %s", libname);
+		opt_is_shared_lib = 1;
+	} 
+	else
+	{
+		LOGI("start profiling executable %s", libname);
+		opt_is_shared_lib = 0;
+	}
+
 	s_maps = read_maps(self, libname);
 
 	if (s_maps == NULL) {
 		systemMessage(0, "No maps found");
 		return;
 	}
+
 	lowpc = s_maps->lo;
 	highpc = s_maps->hi;
 
@@ -345,22 +358,18 @@ void moncleanup(void)
 		fclose(fd);
 		return;
 	}
+
 	hist_num_bins = ssiz;
 
-	unsigned int l = get_real_address(s_maps, (uint32_t) s_lowpc);
-	unsigned int h = get_real_address(s_maps, (uint32_t) s_highpc);
-
-	if (profWrite8(fd, GMON_TAG_TIME_HIST) ||
-/*
-	    profWrite32(fd, get_real_address(s_maps, (uint32_t) s_lowpc)) ||
-	    profWrite32(fd, get_real_address(s_maps, (uint32_t) s_highpc)) ||
-*/
-	    profWrite32(fd, (uint32_t) s_lowpc) ||
-	    profWrite32(fd, (uint32_t) s_highpc) ||
-	    profWrite32(fd, hist_num_bins) ||
-	    profWrite32(fd, sample_freq) ||
-	    profWrite(fd, hist_dimension, 15) ||
-	    profWrite(fd, &hist_dimension_abbrev, 1)
+	if (	profWrite8(fd, GMON_TAG_TIME_HIST) 
+	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) s_lowpc)) 
+	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) s_highpc)) 
+	//||	profWrite32(fd, (uint32_t) s_lowpc) 
+	//||	profWrite32(fd, (uint32_t) s_highpc) 
+	||	profWrite32(fd, hist_num_bins) 
+	||	profWrite32(fd, sample_freq) 
+	||	profWrite(fd, hist_dimension, 15) 
+	||	profWrite(fd, &hist_dimension_abbrev, 1)
 	) 
 	{
 		systemMessage(0, "ERROR writing mcount: gmon.out hist");

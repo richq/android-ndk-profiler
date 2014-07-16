@@ -17,6 +17,7 @@
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "PROFILING", __VA_ARGS__)
 
 static char s_line[256];
+extern int opt_is_shared_lib;
 
 void free_maps(struct proc_map *s)
 {
@@ -93,8 +94,13 @@ unsigned int get_real_address(const struct proc_map *maps, unsigned int fake)
 {
     const struct proc_map *mp = maps;
     while (mp) {
-        if (fake >= mp->lo && fake <= mp->hi) {
-            return fake - mp->lo;
+        if (fake >= mp->lo && fake <= mp->hi) 
+	{
+		if (opt_is_shared_lib)
+		{
+           		return fake - mp->lo;
+		}
+		return fake;
         }
         mp = mp->next;
     }
