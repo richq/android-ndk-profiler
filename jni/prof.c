@@ -69,7 +69,7 @@
 /*
  * froms is actually a bunch of unsigned shorts indexing tos
  */
-static int 		profiling 	= 3;
+//static int 		profiling 	= 3;
 static unsigned short *	froms;
 static struct tostruct*	tos 		= 0;
 static long 		tolimit 	= 0;
@@ -145,8 +145,6 @@ static void check_profil(uint32_t frompcindex)
 		if(pc >= 0 && pc < ssiz)
 		{
 			b[pc]++;
-	
-		//	LOGI("from pc index: 0x%x, lowpc = 0x%x, bucket: 0x%x", frompcindex, s_lowpc, pc);
 		}
 	}
 }
@@ -205,11 +203,11 @@ static void remove_profile_handler(void)
 	setitimer(ITIMER_PROF, &timer, 0);
 }
 
-
 /* Control profiling;
    profiling is what mcount checks to see if
-   all the data structures are ready.  */
-
+   all the data structures are ready.  
+*/
+#if 0
 static void profControl(int mode)
 {
 	if (mode) {
@@ -223,6 +221,7 @@ static void profControl(int mode)
 		systemMessage(1, "parent: done profiling");
 	}
 }
+#endif
 
 static void select_frequency(int max_samples)
 {
@@ -340,7 +339,9 @@ void monstartup(const char *libname)
 		return;
 	}
 
-	profControl(1);
+	//profControl(1);
+	//profiling = 0;
+	add_profile_handler();	
 }
 
 static const char *get_gmon_out(void)
@@ -362,7 +363,9 @@ void moncleanup(void)
 	struct gmon_hdr ghdr;
 	const char *gmon_name = get_gmon_out();
 
-	profControl(0);
+	//profControl(0);
+	remove_profile_handler();
+
 	LOGI("moncleanup, writing output to %s", gmon_name);
 
 	fd = fopen(gmon_name, "wb");
@@ -381,8 +384,6 @@ void moncleanup(void)
 
 	unsigned int l = get_real_address(s_maps, (uint32_t) s_lowpc);
 	unsigned int h = get_real_address(s_maps, (uint32_t) s_highpc);
-
-	LOGI("l = 0x%x, h = 0x%x", l, h);
 
 	if (profWrite8(fd, GMON_TAG_TIME_HIST) ||
 /*
@@ -463,27 +464,23 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 	 * and that we aren't recursively invoked.
 	 */
 
-	//LOGI("profiling: %d", profiling);
+	//if (profiling) {
+	//	return;
+	//}
+	//profiling++;
 
-	if (profiling) {
-		return;
-	}
-
-	//LOGI("frompc: 0x%x, selfpc: 0x%x", *frompcindex, *selfpc);
-
-	profiling++;
 	/*
 	 * check that frompcindex is a reasonable pc value.
 	 * for example: signal catchers get called from the stack,
 	 *   not from text space.  too bad.
 	 */
-	frompcindex =
-		(unsigned short *)((long) frompcindex - (long) s_lowpc);
+	frompcindex = (unsigned short *)((long) frompcindex - (long) s_lowpc);
+
 	if ((unsigned long) frompcindex > s_textsize) {
-		goto done;
+		return;
 	}
-	frompcindex =
-		&froms[((long) frompcindex) / (HASHFRACTION * sizeof(*froms))];
+
+	frompcindex = &froms[((long) frompcindex) / (HASHFRACTION * sizeof(*froms))];
 	toindex = *frompcindex;
 	if (toindex == 0) {
 		/*
@@ -498,7 +495,8 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		top->selfpc = selfpc;
 		top->count = 1;
 		top->link = 0;
-		goto done;
+		//goto done;
+		return;
 	}
 	top = &tos[toindex];
 	if (top->selfpc == selfpc) {
@@ -506,7 +504,8 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		 * arc at front of chain; usual case.
 		 */
 		top->count++;
-		goto done;
+		//goto done;
+		return;
 	}
 	/*
 	 * have to go looking down chain for it.
@@ -531,7 +530,8 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 			top->count = 1;
 			top->link = *frompcindex;
 			*frompcindex = (unsigned short) toindex;
-			goto done;
+			//goto done;
+			return;
 		}
 		/*
 		 * otherwise, check the next arc on the chain.
@@ -549,16 +549,17 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 			prevtop->link = top->link;
 			top->link = *frompcindex;
 			*frompcindex = (unsigned short) toindex;
-			goto done;
+			//goto done;
+			return;
 		}
 	}
 done:
-	profiling--;
+	//profiling--;
 	/* and fall through */
 out:
 	return;			/* normal return restores saved registers */
 overflow:
-	profiling++;		/* halt further profiling */
+	//profiling++;		/* halt further profiling */
 #define TOLIMIT "mcount: tos overflow\n"
 	systemMessage(0, TOLIMIT);
 	goto out;
