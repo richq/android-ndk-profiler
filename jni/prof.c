@@ -63,7 +63,7 @@
 #include "ucontext.h"       /* for ucontext_t */
 
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "PROFILING", __VA_ARGS__)
-#define FREQ_HZ 100
+
 #define DEFAULT_GMON_OUT "/sdcard/gmon.out"
 
 /*
@@ -85,11 +85,7 @@ static int 	hist_num_bins 		= 0;
 static char 	hist_dimension[16] 	= "seconds";
 static char 	hist_dimension_abbrev 	= 's';
 static struct 	proc_map *s_maps 	= NULL;
-static int 	s_freq_hz 		= FREQ_HZ;
-
-unsigned nb_samples = 0;
-
-
+//static int 	s_freq_hz 		= FREQ_HZ;
 
 static void systemMessage(int a, const char *msg)
 {
@@ -170,13 +166,11 @@ static void profile_action(int sig, siginfo_t *info, void *context)
 	//{
 	//	return;
 	//}
-	nb_samples++;
 	check_profil(mcontext->arm_pc);
 }
 
-static void add_profile_handler(void)
+static void add_profile_handler(int sample_freq)
 {
-
 	struct sigaction action;
 	/* request info, sigaction called instead of sighandler */
 	action.sa_flags = SA_SIGINFO | SA_RESTART;
@@ -191,16 +185,20 @@ static void add_profile_handler(void)
 
 	struct itimerval timer;
 	timer.it_interval.tv_sec = 0;
-	timer.it_interval.tv_usec = 1000000 / s_freq_hz;
+	timer.it_interval.tv_usec = 1000000 / sample_freq;
 	timer.it_value = timer.it_interval;
 	setitimer(ITIMER_PROF, &timer, 0);
 }
 
-static void remove_profile_handler(void)
+static long remove_profile_handler(void)
 {
 	struct itimerval timer;
+	struct itimerval oldtimer;
+
 	memset(&timer, 0, sizeof(timer));
-	setitimer(ITIMER_PROF, &timer, 0);
+	setitimer(ITIMER_PROF, &timer, &oldtimer);
+
+	return oldtimer.it_value.tv_usec;
 }
 
 /* Control profiling;
@@ -223,23 +221,23 @@ static void profControl(int mode)
 }
 #endif
 
-static void select_frequency(int max_samples)
+static int select_frequency()
 {
-	char *freq = getenv("CPUPROFILE_FREQUENCY");
+	int max_samples	= get_max_samples_per_sec();
+	char *freq 	= getenv("CPUPROFILE_FREQUENCY");
 	
 	if (!freq) 
 	{
-		LOGI("using sample frequency: %d", s_freq_hz);
-		return;
+		LOGI("using sample frequency: %d", max_samples);
+		return max_samples;
 	}
 
 	int freqval = strtol(freq, 0, 0);
 
-
 	if (freqval <= 0)
 	{
 		LOGI("Invalid frequency value: %d, using default: %d", freqval, max_samples);
-		return;
+		return max_samples;
 	}
 
 	LOGI("Maximum number of samples per second: %d", max_samples);
@@ -248,11 +246,10 @@ static void select_frequency(int max_samples)
 	if (freqval > max_samples)
 	{
 		LOGI("Specified sample rate is too large, using %d", max_samples);
-		s_freq_hz = max_samples;
-		return;
+		return max_samples;
 	}
 
-	s_freq_hz = freqval;
+	return freqval;
 }
 
 #define MSG ("No space for profiling buffer(s)\n")
@@ -287,9 +284,7 @@ void monstartup(const char *libname)
 			lowpc, highpc,
 			s_maps->base);
 	
-	int max_samples = s_freq_hz = get_max_samples_per_sec();
-
-	select_frequency(max_samples);
+	int sample_freq = select_frequency();
 
 	/*
 	 * round lowpc and highpc to multiples of the density we're using
@@ -341,7 +336,7 @@ void monstartup(const char *libname)
 
 	//profControl(1);
 	//profiling = 0;
-	add_profile_handler();	
+	add_profile_handler(sample_freq);	
 }
 
 static const char *get_gmon_out(void)
@@ -364,8 +359,10 @@ void moncleanup(void)
 	const char *gmon_name = get_gmon_out();
 
 	//profControl(0);
-	remove_profile_handler();
+	long ival = remove_profile_handler();
+	int sample_freq = 1000000 / ival;
 
+	LOGI("Sampling frequency: %d", sample_freq);
 	LOGI("moncleanup, writing output to %s", gmon_name);
 
 	fd = fopen(gmon_name, "wb");
@@ -393,7 +390,8 @@ void moncleanup(void)
 	    profWrite32(fd, (uint32_t) s_lowpc) ||
 	    profWrite32(fd, (uint32_t) s_highpc) ||
 	    profWrite32(fd, hist_num_bins) ||
-	    profWrite32(fd, s_freq_hz) ||
+	    //profWrite32(fd, s_freq_hz) ||
+	    profWrite32(fd, sample_freq) ||
 	    profWrite(fd, hist_dimension, 15) ||
 	    profWrite(fd, &hist_dimension_abbrev, 1)
 	) 
