@@ -69,23 +69,27 @@
 /*
  * froms is actually a bunch of unsigned shorts indexing tos
  */
-static int profiling = 3;
-static unsigned short *froms;
-static struct tostruct *tos = 0;
-static long tolimit = 0;
-static uint32_t s_lowpc = 0;
-static uint32_t s_highpc = 0;
-static unsigned long s_textsize = 0;
+static int 		profiling 	= 3;
+static unsigned short *	froms;
+static struct tostruct*	tos 		= 0;
+static long 		tolimit 	= 0;
+static uint32_t 	s_lowpc 	= 0;
+static uint32_t 	s_highpc 	= 0;
+static unsigned long 	s_textsize 	= 0;
 
-static int ssiz;
-static char *sbuf;
-static int s_scale;
+static int 	ssiz;
+static char *	sbuf;
+static int 	s_scale;
 
-static int hist_num_bins = 0;
-static char hist_dimension[16] = "seconds";
-static char hist_dimension_abbrev = 's';
-static struct proc_map *s_maps = NULL;
-static int s_freq_hz = FREQ_HZ;
+static int 	hist_num_bins 		= 0;
+static char 	hist_dimension[16] 	= "seconds";
+static char 	hist_dimension_abbrev 	= 's';
+static struct 	proc_map *s_maps 	= NULL;
+static int 	s_freq_hz 		= FREQ_HZ;
+
+unsigned nb_samples = 0;
+
+
 
 static void systemMessage(int a, const char *msg)
 {
@@ -137,17 +141,38 @@ static void check_profil(uint32_t frompcindex)
 	if (sbuf && ssiz) {
 		uint16_t *b = (uint16_t *)sbuf;
 		int pc = (frompcindex - s_lowpc) / s_scale;
+
 		if(pc >= 0 && pc < ssiz)
+		{
 			b[pc]++;
+	
+		//	LOGI("from pc index: 0x%x, lowpc = 0x%x, bucket: 0x%x", frompcindex, s_lowpc, pc);
+		}
 	}
+}
+
+
+static int get_max_samples_per_sec()
+{
+	struct itimerval timer;
+
+	timer.it_interval.tv_sec = 0;
+	timer.it_interval.tv_usec = 1;
+	timer.it_value = timer.it_interval;
+	setitimer(ITIMER_PROF, &timer, 0);
+	setitimer(ITIMER_PROF, 0, &timer);
+	return 1000000 / timer.it_interval.tv_usec;
 }
 
 static void profile_action(int sig, siginfo_t *info, void *context)
 {
 	ucontext_t *ucontext = (ucontext_t*) context;
 	struct sigcontext *mcontext = &ucontext->uc_mcontext;
-	if (profiling)
-		return;
+	//if (profiling)
+	//{
+	//	return;
+	//}
+	nb_samples++;
 	check_profil(mcontext->arm_pc);
 }
 
@@ -199,16 +224,36 @@ static void profControl(int mode)
 	}
 }
 
-static void get_frequency(void)
+static void select_frequency(int max_samples)
 {
 	char *freq = getenv("CPUPROFILE_FREQUENCY");
-	if (freq != 0) {
-		int freqval = strtol(freq, 0, 0);
-		if (freqval > 0)
-			s_freq_hz = freqval;
-		else
-			LOGI("Invalid frequency value: %d", freqval);
+	
+	if (!freq) 
+	{
+		LOGI("using sample frequency: %d", s_freq_hz);
+		return;
 	}
+
+	int freqval = strtol(freq, 0, 0);
+
+
+	if (freqval <= 0)
+	{
+		LOGI("Invalid frequency value: %d, using default: %d", freqval, max_samples);
+		return;
+	}
+
+	LOGI("Maximum number of samples per second: %d", max_samples);
+	LOGI("Specified frequency: %d", freqval);
+
+	if (freqval > max_samples)
+	{
+		LOGI("Specified sample rate is too large, using %d", max_samples);
+		s_freq_hz = max_samples;
+		return;
+	}
+
+	s_freq_hz = freqval;
 }
 
 #define MSG ("No space for profiling buffer(s)\n")
@@ -219,21 +264,34 @@ void monstartup(const char *libname)
 	int monsize;
 	char *buffer;
 	uint32_t lowpc, highpc;
+
 	FILE *self = fopen("/proc/self/maps", "r");
+
+	if(!self)
+	{
+		systemMessage(1, "Cannot open memory maps file");
+		return;
+	}
+
 	s_maps = read_maps(self, libname);
+
 	if (s_maps == NULL) {
 		systemMessage(0, "No maps found");
 		return;
 	}
 	lowpc = s_maps->lo;
 	highpc = s_maps->hi;
+
 	__android_log_print(ANDROID_LOG_INFO, "PROFILING",
 			"Profile %s %x-%x: %d",
 			libname,
 			lowpc, highpc,
 			s_maps->base);
+	
+	int max_samples = s_freq_hz = get_max_samples_per_sec();
 
-	get_frequency();
+	select_frequency(max_samples);
+
 	/*
 	 * round lowpc and highpc to multiples of the density we're using
 	 * so the rest of the scaling (here and in gprof) stays in ints.
@@ -242,6 +300,7 @@ void monstartup(const char *libname)
 	s_lowpc = lowpc;
 	highpc = ROUNDUP(highpc, HISTFRACTION * sizeof(HISTCOUNTER));
 	s_highpc = highpc;
+
 	s_textsize = highpc - lowpc;
 	monsize = (s_textsize / HISTFRACTION);
 	s_scale = HISTFRACTION;
@@ -280,6 +339,7 @@ void monstartup(const char *libname)
 	if (monsize <= 0) {
 		return;
 	}
+
 	profControl(1);
 }
 
@@ -301,9 +361,10 @@ void moncleanup(void)
 	int toindex;
 	struct gmon_hdr ghdr;
 	const char *gmon_name = get_gmon_out();
-	LOGI("parent: moncleanup called");
+
 	profControl(0);
-	LOGI("writing gmon.out");
+	LOGI("moncleanup, writing output to %s", gmon_name);
+
 	fd = fopen(gmon_name, "wb");
 	if (fd == NULL) {
 		systemMessage(0, "mcount: gmon.out");
@@ -317,14 +378,26 @@ void moncleanup(void)
 		return;
 	}
 	hist_num_bins = ssiz;
+
+	unsigned int l = get_real_address(s_maps, (uint32_t) s_lowpc);
+	unsigned int h = get_real_address(s_maps, (uint32_t) s_highpc);
+
+	LOGI("l = 0x%x, h = 0x%x", l, h);
+
 	if (profWrite8(fd, GMON_TAG_TIME_HIST) ||
+/*
 	    profWrite32(fd, get_real_address(s_maps, (uint32_t) s_lowpc)) ||
 	    profWrite32(fd, get_real_address(s_maps, (uint32_t) s_highpc)) ||
+*/
+	    profWrite32(fd, (uint32_t) s_lowpc) ||
+	    profWrite32(fd, (uint32_t) s_highpc) ||
 	    profWrite32(fd, hist_num_bins) ||
 	    profWrite32(fd, s_freq_hz) ||
 	    profWrite(fd, hist_dimension, 15) ||
-	    profWrite(fd, &hist_dimension_abbrev, 1)) {
-		systemMessage(0, "mcount: gmon.out hist");
+	    profWrite(fd, &hist_dimension_abbrev, 1)
+	) 
+	{
+		systemMessage(0, "ERROR writing mcount: gmon.out hist");
 		fclose(fd);
 		return;
 	}
@@ -333,8 +406,9 @@ void moncleanup(void)
 	int i;
 	for (i = 0; i < hist_num_bins; ++i) {
 		profPut16((char *) &count, hist_sample[i]);
+		//LOGI("bin: %d, value: %d", i, hist_sample[i]);
 		if (fwrite(&count, sizeof(count), 1, fd) != 1) {
-			systemMessage(0, "mcount: gmon.out sample");
+			systemMessage(0, "ERROR writing file mcount: gmon.out sample");
 			fclose(fd);
 			return;
 		}
@@ -357,9 +431,12 @@ void moncleanup(void)
 							    tos[toindex].
 							    selfpc))
 			    || profWrite32(fd, tos[toindex].count)) {
-				systemMessage(0, "mcount: arc");
+				systemMessage(0, "ERROR writing mcount: arc");
 				fclose(fd);
 				return;
+			}
+			else
+			{
 			}
 		}
 	}
@@ -385,9 +462,15 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 	 * check that we are profiling
 	 * and that we aren't recursively invoked.
 	 */
+
+	//LOGI("profiling: %d", profiling);
+
 	if (profiling) {
 		return;
 	}
+
+	//LOGI("frompc: 0x%x, selfpc: 0x%x", *frompcindex, *selfpc);
+
 	profiling++;
 	/*
 	 * check that frompcindex is a reasonable pc value.
