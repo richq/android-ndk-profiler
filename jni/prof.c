@@ -66,9 +66,6 @@
 
 #define DEFAULT_GMON_OUT "/sdcard/gmon.out"
 
-#undef HISTFRACTION
-#define HISTFRACTION 	1
-
 /*
  * froms is actually a bunch of unsigned shorts indexing tos
  */
@@ -87,6 +84,20 @@ static char 	hist_dimension[16] 	= "seconds";
 static char 	hist_dimension_abbrev 	= 's';
 static struct 	proc_map *s_maps 	= NULL;
 int		opt_is_shared_lib	= 0;
+
+
+
+typedef struct
+{
+	int 	size;
+	char *	bins;
+} 
+histogram_t;
+
+histogram_t hist;
+
+
+
 
 static void systemMessage(int a, const char *msg)
 {
@@ -153,7 +164,9 @@ static void histogram_bin_incr(int sig, siginfo_t *info, void *context)
 
 	uint16_t *b = (uint16_t *)sbuf;
 
-	unsigned int pc = (frompcindex - s_lowpc) >> HISTFRACTION;
+	// the pc should be divided by HISTFRACTION, but we do 
+	// a right shift with 1 because HISTFRACTION=2
+	unsigned int pc = (frompcindex - s_lowpc) >> 1;
 
 	if(pc < ssiz)
 	{
@@ -229,8 +242,6 @@ static int select_frequency()
 __attribute__((visibility("default")))
 void monstartup(const char *libname)
 {
-	int monsize;
-	char *buffer;
 	uint32_t lowpc, highpc;
 
 	FILE *self = fopen("/proc/self/maps", "r");
@@ -262,11 +273,7 @@ void monstartup(const char *libname)
 	lowpc = s_maps->lo;
 	highpc = s_maps->hi;
 
-	__android_log_print(ANDROID_LOG_INFO, "PROFILING",
-			"Profile %s %x-%x: %d",
-			libname,
-			lowpc, highpc,
-			s_maps->base);
+	LOGI("Profile %s, pc: 0x%x-0x%x, base: 0x%d", libname,lowpc, highpc, s_maps->base);
 	
 	int sample_freq = select_frequency();
 
@@ -280,17 +287,24 @@ void monstartup(const char *libname)
 	s_highpc = highpc;
 
 	s_textsize = highpc - lowpc;
-	monsize = (s_textsize / HISTFRACTION);
-	buffer = calloc(1, 2 * monsize);
-	if (buffer == NULL) {
+
+	ssiz = (s_textsize / HISTFRACTION);
+
+	//FIXME: check if '2' is the size of short or if it has another meaning
+	sbuf = calloc(1, sizeof(short) * ssiz);
+	if (!sbuf) {
 		systemMessage(0, MSG);
 		return;
 	}
-	froms = calloc(1, 4 * s_textsize / HASHFRACTION);
+
+	//FIXME: what should be the size of 'froms'
+	//froms = calloc(1, 4 * s_textsize / HASHFRACTION);
+	froms = calloc(1, sizeof(short) * ssiz);
+
 	if (froms == NULL) {
 		systemMessage(0, MSG);
-		free(buffer);
-		buffer = NULL;
+		free(sbuf);
+		//buffer = NULL;
 		return;
 	}
 	tolimit = s_textsize * ARCDENSITY / 100;
@@ -299,21 +313,18 @@ void monstartup(const char *libname)
 	} else if (tolimit > 65534) {
 		tolimit = 65534;
 	}
-	tos =
-		(struct tostruct *) calloc(1,
-					   tolimit * sizeof(struct tostruct));
+
+	tos = (struct tostruct *) calloc(1, tolimit * sizeof(struct tostruct));
 	if (tos == NULL) {
 		systemMessage(0, MSG);
-		free(buffer);
-		buffer = NULL;
+		free(sbuf);
 		free(froms);
 		froms = NULL;
 		return;
 	}
 	tos[0].link = 0;
-	sbuf = buffer;
-	ssiz = monsize;
-	if (monsize <= 0) {
+
+	if (ssiz <= 0) {
 		return;
 	}
 
