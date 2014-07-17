@@ -66,6 +66,9 @@
 
 #define DEFAULT_GMON_OUT "/sdcard/gmon.out"
 
+#undef HISTFRACTION
+#define HISTFRACTION 	1
+
 /*
  * froms is actually a bunch of unsigned shorts indexing tos
  */
@@ -78,7 +81,6 @@ static unsigned long 	s_textsize 	= 0;
 
 static int 	ssiz;
 static char *	sbuf;
-static int 	s_scale;
 
 static int 	hist_num_bins 		= 0;
 static char 	hist_dimension[16] 	= "seconds";
@@ -143,21 +145,19 @@ static int get_max_samples_per_sec()
 	return 1000000 / timer.it_interval.tv_usec;
 }
 
-static void profile_action(int sig, siginfo_t *info, void *context)
+static void histogram_bin_incr(int sig, siginfo_t *info, void *context)
 {
 	ucontext_t *ucontext 		= (ucontext_t*) context;
 	struct sigcontext *mcontext 	= &ucontext->uc_mcontext;
 	uint32_t frompcindex 		= mcontext->arm_pc;
 
-	if (sbuf && ssiz) 
-	{
-		uint16_t *b = (uint16_t *)sbuf;
-		int pc = (frompcindex - s_lowpc) / s_scale;
+	uint16_t *b = (uint16_t *)sbuf;
 
-		if(pc >= 0 && pc < ssiz)
-		{
-			b[pc]++;
-		}
+	unsigned int pc = (frompcindex - s_lowpc) >> HISTFRACTION;
+
+	if(pc < ssiz)
+	{
+		b[pc]++;
 	}
 }
 
@@ -166,7 +166,7 @@ static void add_profile_handler(int sample_freq)
 	struct sigaction action;
 	/* request info, sigaction called instead of sighandler */
 	action.sa_flags = SA_SIGINFO | SA_RESTART;
-	action.sa_sigaction = profile_action;
+	action.sa_sigaction = histogram_bin_incr;
 	sigemptyset(&action.sa_mask);
 	int result = sigaction(SIGPROF, &action, NULL);
 	if (result != 0) {
@@ -281,7 +281,6 @@ void monstartup(const char *libname)
 
 	s_textsize = highpc - lowpc;
 	monsize = (s_textsize / HISTFRACTION);
-	s_scale = HISTFRACTION;
 	buffer = calloc(1, 2 * monsize);
 	if (buffer == NULL) {
 		systemMessage(0, MSG);
@@ -364,8 +363,6 @@ void moncleanup(void)
 	if (	profWrite8(fd, GMON_TAG_TIME_HIST) 
 	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) s_lowpc)) 
 	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) s_highpc)) 
-	//||	profWrite32(fd, (uint32_t) s_lowpc) 
-	//||	profWrite32(fd, (uint32_t) s_highpc) 
 	||	profWrite32(fd, hist_num_bins) 
 	||	profWrite32(fd, sample_freq) 
 	||	profWrite(fd, hist_dimension, 15) 
@@ -474,6 +471,7 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		top->count++;
 		return;
 	}
+
 	/*
 	 * have to go looking down chain for it.
 	 * top points to what we are looking at,

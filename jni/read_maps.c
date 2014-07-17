@@ -72,15 +72,12 @@ struct proc_map *read_maps(FILE *fp, const char *lname)
 				current->next = NULL;
 			}
 
-			#if DEBUG
-				LOGI("line is: %s", s_line);
-				LOGI(	"object '%s' found, base = 0x%x, lo = 0x%x, hi = 0x%x"
-				, 	lname
-				, 	base
-				, 	lo
-				, 	hi
-				);
-			#endif
+			LOGI(	"process '%s', base = 0x%x, lo = 0x%x, hi = 0x%x"
+			, 	lname
+			, 	base
+			, 	lo
+			, 	hi
+			);
 
 			current->base = base;
 			current->lo = lo;
