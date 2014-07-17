@@ -72,12 +72,17 @@
 static unsigned short *	froms;
 static struct tostruct*	tos 		= 0;
 static long 		tolimit 	= 0;
-static uint32_t 	s_lowpc 	= 0;
-static uint32_t 	s_highpc 	= 0;
-static unsigned long 	s_textsize 	= 0;
 
 static struct 	proc_map *s_maps 	= NULL;
 int		opt_is_shared_lib	= 0;
+
+typedef struct
+{
+	uint32_t 	low_pc;
+	uint32_t 	high_pc;
+	unsigned long 	text_size;
+}
+process_t;
 
 typedef struct
 {
@@ -86,8 +91,8 @@ typedef struct
 } 
 histogram_t;
 
-static histogram_t hist;
-
+static histogram_t 	hist;
+static process_t 	process;
 
 
 static void systemMessage(int a, const char *msg)
@@ -153,11 +158,11 @@ static void histogram_bin_incr(int sig, siginfo_t *info, void *context)
 	struct sigcontext *mcontext 	= &ucontext->uc_mcontext;
 	uint32_t frompcindex 		= mcontext->arm_pc;
 
-	uint16_t *b = (uint16_t *)hist.bins;
+	uint16_t *b = (uint16_t *) hist.bins;
 
 	// the pc should be divided by HISTFRACTION, but we do 
 	// a right shift with 1 because HISTFRACTION=2
-	unsigned int pc = (frompcindex - s_lowpc) >> 1;
+	unsigned int pc = (frompcindex - process.low_pc) >> 1;
 
 	if(pc < hist.nb_bins)
 	{
@@ -233,8 +238,6 @@ static int select_frequency()
 __attribute__((visibility("default")))
 void monstartup(const char *libname)
 {
-	uint32_t lowpc, highpc;
-
 	FILE *self = fopen("/proc/self/maps", "r");
 
 	if(!self)
@@ -261,10 +264,10 @@ void monstartup(const char *libname)
 		return;
 	}
 
-	lowpc = s_maps->lo;
-	highpc = s_maps->hi;
+	process.low_pc = s_maps->lo;
+	process.high_pc = s_maps->hi;
 
-	LOGI("Profile %s, pc: 0x%x-0x%x, base: 0x%d", libname,lowpc, highpc, s_maps->base);
+	LOGI("Profile %s, pc: 0x%x-0x%x, base: 0x%d", libname, process.low_pc, process.high_pc, s_maps->base);
 	
 	int sample_freq = select_frequency();
 
@@ -272,14 +275,12 @@ void monstartup(const char *libname)
 	 * round lowpc and highpc to multiples of the density we're using
 	 * so the rest of the scaling (here and in gprof) stays in ints.
 	 */
-	lowpc = ROUNDDOWN(lowpc, HISTFRACTION * sizeof(HISTCOUNTER));
-	s_lowpc = lowpc;
-	highpc = ROUNDUP(highpc, HISTFRACTION * sizeof(HISTCOUNTER));
-	s_highpc = highpc;
+	process.low_pc = ROUNDDOWN(process.low_pc, HISTFRACTION * sizeof(HISTCOUNTER));
+	process.high_pc = ROUNDUP(process.high_pc, HISTFRACTION * sizeof(HISTCOUNTER));
 
-	s_textsize = highpc - lowpc;
+	process.text_size = process.high_pc - process.low_pc;
 
-	hist.nb_bins = (s_textsize / HISTFRACTION);
+	hist.nb_bins = (process.text_size / HISTFRACTION);
 
 	//FIXME: check if '2' is the size of short or if it has another meaning
 	hist.bins = calloc(1, sizeof(short) * hist.nb_bins);
@@ -289,7 +290,7 @@ void monstartup(const char *libname)
 	}
 
 	//FIXME: what should be the size of 'froms'
-	//froms = calloc(1, 4 * s_textsize / HASHFRACTION);
+	//froms = calloc(1, 4 * process.text_size / HASHFRACTION);
 	froms = calloc(1, sizeof(short) * hist.nb_bins);
 
 	if (froms == NULL) {
@@ -297,7 +298,7 @@ void monstartup(const char *libname)
 		free(hist.bins);
 		return;
 	}
-	tolimit = s_textsize * ARCDENSITY / 100;
+	tolimit = process.text_size * ARCDENSITY / 100;
 	if (tolimit < MINARCS) {
 		tolimit = MINARCS;
 	} else if (tolimit > 65534) {
@@ -360,8 +361,8 @@ void moncleanup(void)
 	}
 
 	if (	profWrite8(fd, GMON_TAG_TIME_HIST) 
-	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) s_lowpc)) 
-	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) s_highpc)) 
+	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) process.low_pc)) 
+	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) process.high_pc)) 
 	||	profWrite32(fd, hist.nb_bins) 
 	||	profWrite32(fd, sample_freq) 
 	||	profWrite(fd, "seconds", 15) 
@@ -384,13 +385,13 @@ void moncleanup(void)
 			return;
 		}
 	}
-	endfrom = s_textsize / (HASHFRACTION * sizeof(*froms));
+	endfrom = process.text_size / (HASHFRACTION * sizeof(*froms));
 	for (fromindex = 0; fromindex < endfrom; fromindex++) {
 		if (froms[fromindex] == 0) {
 			continue;
 		}
 		frompc =
-			s_lowpc + (fromindex * HASHFRACTION * sizeof(*froms));
+			process.low_pc + (fromindex * HASHFRACTION * sizeof(*froms));
 		frompc = get_real_address(s_maps, frompc);
 		for (toindex = froms[fromindex]; toindex != 0;
 		     toindex = tos[toindex].link) {
@@ -439,9 +440,9 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 	 * for example: signal catchers get called from the stack,
 	 *   not from text space.  too bad.
 	 */
-	frompcindex = (unsigned short *)((long) frompcindex - (long) s_lowpc);
+	frompcindex = (unsigned short *)((long) frompcindex - (long) process.low_pc);
 
-	if ((unsigned long) frompcindex > s_textsize) {
+	if ((unsigned long) frompcindex > process.text_size) {
 		return;
 	}
 
