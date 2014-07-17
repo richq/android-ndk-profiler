@@ -76,26 +76,17 @@ static uint32_t 	s_lowpc 	= 0;
 static uint32_t 	s_highpc 	= 0;
 static unsigned long 	s_textsize 	= 0;
 
-static int 	ssiz;
-static char *	sbuf;
-
-static int 	hist_num_bins 		= 0;
-static char 	hist_dimension[16] 	= "seconds";
-static char 	hist_dimension_abbrev 	= 's';
 static struct 	proc_map *s_maps 	= NULL;
 int		opt_is_shared_lib	= 0;
 
-
-
 typedef struct
 {
-	int 	size;
+	int 	nb_bins;
 	char *	bins;
 } 
 histogram_t;
 
-histogram_t hist;
-
+static histogram_t hist;
 
 
 
@@ -162,13 +153,13 @@ static void histogram_bin_incr(int sig, siginfo_t *info, void *context)
 	struct sigcontext *mcontext 	= &ucontext->uc_mcontext;
 	uint32_t frompcindex 		= mcontext->arm_pc;
 
-	uint16_t *b = (uint16_t *)sbuf;
+	uint16_t *b = (uint16_t *)hist.bins;
 
 	// the pc should be divided by HISTFRACTION, but we do 
 	// a right shift with 1 because HISTFRACTION=2
 	unsigned int pc = (frompcindex - s_lowpc) >> 1;
 
-	if(pc < ssiz)
+	if(pc < hist.nb_bins)
 	{
 		b[pc]++;
 	}
@@ -288,23 +279,22 @@ void monstartup(const char *libname)
 
 	s_textsize = highpc - lowpc;
 
-	ssiz = (s_textsize / HISTFRACTION);
+	hist.nb_bins = (s_textsize / HISTFRACTION);
 
 	//FIXME: check if '2' is the size of short or if it has another meaning
-	sbuf = calloc(1, sizeof(short) * ssiz);
-	if (!sbuf) {
+	hist.bins = calloc(1, sizeof(short) * hist.nb_bins);
+	if (!hist.bins) {
 		systemMessage(0, MSG);
 		return;
 	}
 
 	//FIXME: what should be the size of 'froms'
 	//froms = calloc(1, 4 * s_textsize / HASHFRACTION);
-	froms = calloc(1, sizeof(short) * ssiz);
+	froms = calloc(1, sizeof(short) * hist.nb_bins);
 
 	if (froms == NULL) {
 		systemMessage(0, MSG);
-		free(sbuf);
-		//buffer = NULL;
+		free(hist.bins);
 		return;
 	}
 	tolimit = s_textsize * ARCDENSITY / 100;
@@ -317,14 +307,14 @@ void monstartup(const char *libname)
 	tos = (struct tostruct *) calloc(1, tolimit * sizeof(struct tostruct));
 	if (tos == NULL) {
 		systemMessage(0, MSG);
-		free(sbuf);
+		free(hist.bins);
 		free(froms);
 		froms = NULL;
 		return;
 	}
 	tos[0].link = 0;
 
-	if (ssiz <= 0) {
+	if (hist.nb_bins <= 0) {
 		return;
 	}
 
@@ -369,25 +359,23 @@ void moncleanup(void)
 		return;
 	}
 
-	hist_num_bins = ssiz;
-
 	if (	profWrite8(fd, GMON_TAG_TIME_HIST) 
 	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) s_lowpc)) 
 	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) s_highpc)) 
-	||	profWrite32(fd, hist_num_bins) 
+	||	profWrite32(fd, hist.nb_bins) 
 	||	profWrite32(fd, sample_freq) 
-	||	profWrite(fd, hist_dimension, 15) 
-	||	profWrite(fd, &hist_dimension_abbrev, 1)
+	||	profWrite(fd, "seconds", 15) 
+	||	profWrite(fd, "s", 1)
 	) 
 	{
 		systemMessage(0, "ERROR writing mcount: gmon.out hist");
 		fclose(fd);
 		return;
 	}
-	uint16_t *hist_sample = (uint16_t *) sbuf;
+	uint16_t *hist_sample = (uint16_t *) hist.bins;
 	uint16_t count;
 	int i;
-	for (i = 0; i < hist_num_bins; ++i) {
+	for (i = 0; i < hist.nb_bins; ++i) {
 		profPut16((char *) &count, hist_sample[i]);
 		//LOGI("bin: %d, value: %d", i, hist_sample[i]);
 		if (fwrite(&count, sizeof(count), 1, fd) != 1) {
