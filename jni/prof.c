@@ -66,15 +66,13 @@
 
 #define DEFAULT_GMON_OUT "/sdcard/gmon.out"
 
-/*
- * froms is actually a bunch of unsigned shorts indexing tos
- */
-static unsigned short *	froms;
-static struct tostruct*	tos 		= 0;
-static long 		tolimit 	= 0;
-
-static struct 	proc_map *s_maps 	= NULL;
-int		opt_is_shared_lib	= 0;
+typedef struct
+{
+ 	unsigned short *	froms;
+ 	struct tostruct*	tos;
+ 	long 			tolimit;
+}
+callgraph_t;
 
 typedef struct
 {
@@ -93,6 +91,9 @@ histogram_t;
 
 static histogram_t 	hist;
 static process_t 	process;
+static callgraph_t 	cg;
+static struct 		proc_map *s_maps = NULL;
+       int		opt_is_shared_lib = 0;
 
 
 static void systemMessage(int a, const char *msg)
@@ -233,7 +234,66 @@ static int select_frequency()
 	return freqval;
 }
 
+static void process_init()
+{
+	process.low_pc = s_maps->lo;
+	process.high_pc = s_maps->hi;
+	/*
+	 * round lowpc and highpc to multiples of the density we're using
+	 * so the rest of the scaling (here and in gprof) stays in ints.
+	 */
+	process.low_pc 	= ROUNDDOWN(process.low_pc, HISTFRACTION * sizeof(HISTCOUNTER));
+	process.high_pc	= ROUNDUP(process.high_pc, HISTFRACTION * sizeof(HISTCOUNTER));
+	process.text_size = process.high_pc - process.low_pc;
+}
+
 #define MSG ("No space for profiling buffer(s)\n")
+
+static int histogram_init()
+{
+	hist.nb_bins = (process.text_size / HISTFRACTION);
+
+	//FIXME: check if '2' is the size of short or if it has another meaning
+	hist.bins = calloc(1, sizeof(short) * hist.nb_bins);
+	if (!hist.bins) {
+		systemMessage(0, MSG);
+		return 0;
+	}
+	return 1;
+}
+
+static int cg_init()
+{
+	//FIXME: what should be the size of 'froms'
+	//froms = calloc(1, 4 * process.text_size / HASHFRACTION);
+	cg.froms = calloc(1, sizeof(short) * hist.nb_bins);
+
+	if (cg.froms == NULL) {
+		systemMessage(0, MSG);
+		free(hist.bins);
+		return 0;
+	}
+
+	cg.tolimit = process.text_size * ARCDENSITY / 100;
+
+	if (cg.tolimit < MINARCS) {
+		cg.tolimit = MINARCS;
+	} else if (cg.tolimit > 65534) {
+		cg.tolimit = 65534;
+	}
+
+	cg.tos = (struct tostruct *) calloc(1, cg.tolimit * sizeof(struct tostruct));
+	if (cg.tos == NULL) {
+		systemMessage(0, MSG);
+		free(hist.bins);
+		free(cg.froms);
+		cg.froms = NULL;
+		return 0;
+	}
+	cg.tos[0].link = 0;
+
+	return 1;
+}
 
 __attribute__((visibility("default")))
 void monstartup(const char *libname)
@@ -264,61 +324,21 @@ void monstartup(const char *libname)
 		return;
 	}
 
-	process.low_pc = s_maps->lo;
-	process.high_pc = s_maps->hi;
+	process_init();
 
-	LOGI("Profile %s, pc: 0x%x-0x%x, base: 0x%d", libname, process.low_pc, process.high_pc, s_maps->base);
+	if (!histogram_init()) {
+		return;
+	}
+
+	LOGI("Profile %s, pc: 0x%x-0x%x, base: 0x%d"
+	, 	libname, process.low_pc, process.high_pc, s_maps->base
+	);
 	
+	if(!cg_init()) {
+		return;
+	}
+
 	int sample_freq = select_frequency();
-
-	/*
-	 * round lowpc and highpc to multiples of the density we're using
-	 * so the rest of the scaling (here and in gprof) stays in ints.
-	 */
-	process.low_pc = ROUNDDOWN(process.low_pc, HISTFRACTION * sizeof(HISTCOUNTER));
-	process.high_pc = ROUNDUP(process.high_pc, HISTFRACTION * sizeof(HISTCOUNTER));
-
-	process.text_size = process.high_pc - process.low_pc;
-
-	hist.nb_bins = (process.text_size / HISTFRACTION);
-
-	//FIXME: check if '2' is the size of short or if it has another meaning
-	hist.bins = calloc(1, sizeof(short) * hist.nb_bins);
-	if (!hist.bins) {
-		systemMessage(0, MSG);
-		return;
-	}
-
-	//FIXME: what should be the size of 'froms'
-	//froms = calloc(1, 4 * process.text_size / HASHFRACTION);
-	froms = calloc(1, sizeof(short) * hist.nb_bins);
-
-	if (froms == NULL) {
-		systemMessage(0, MSG);
-		free(hist.bins);
-		return;
-	}
-	tolimit = process.text_size * ARCDENSITY / 100;
-	if (tolimit < MINARCS) {
-		tolimit = MINARCS;
-	} else if (tolimit > 65534) {
-		tolimit = 65534;
-	}
-
-	tos = (struct tostruct *) calloc(1, tolimit * sizeof(struct tostruct));
-	if (tos == NULL) {
-		systemMessage(0, MSG);
-		free(hist.bins);
-		free(froms);
-		froms = NULL;
-		return;
-	}
-	tos[0].link = 0;
-
-	if (hist.nb_bins <= 0) {
-		return;
-	}
-
 	add_profile_handler(sample_freq);	
 }
 
@@ -333,13 +353,13 @@ static const char *get_gmon_out(void)
 __attribute__((visibility("default")))
 void moncleanup(void)
 {
-	FILE *fd;
-	int fromindex;
-	int endfrom;
-	uint32_t frompc;
-	int toindex;
-	struct gmon_hdr ghdr;
-	const char *gmon_name = get_gmon_out();
+	FILE *		fd;
+	int 		fromindex;
+	int 		endfrom;
+	uint32_t 	frompc;
+	int 		toindex;
+	struct 		gmon_hdr ghdr;
+	const char *	gmon_name = get_gmon_out();
 
 	long ival = remove_profile_handler();
 	int sample_freq = 1000000 / ival;
@@ -385,24 +405,24 @@ void moncleanup(void)
 			return;
 		}
 	}
-	endfrom = process.text_size / (HASHFRACTION * sizeof(*froms));
+	endfrom = process.text_size / (HASHFRACTION * sizeof(*cg.froms));
 	for (fromindex = 0; fromindex < endfrom; fromindex++) {
-		if (froms[fromindex] == 0) {
+		if (cg.froms[fromindex] == 0) {
 			continue;
 		}
 		frompc =
-			process.low_pc + (fromindex * HASHFRACTION * sizeof(*froms));
+			process.low_pc + (fromindex * HASHFRACTION * sizeof(*cg.froms));
 		frompc = get_real_address(s_maps, frompc);
-		for (toindex = froms[fromindex]; toindex != 0;
-		     toindex = tos[toindex].link) {
+		for (toindex = cg.froms[fromindex]; toindex != 0;
+		     toindex = cg.tos[toindex].link) {
 			if (profWrite8(fd, GMON_TAG_CG_ARC)
 			    || profWrite32(fd, (uint32_t) frompc)
 			    || profWrite32(fd,
 					   get_real_address(s_maps,
 							    (uint32_t)
-							    tos[toindex].
+							    cg.tos[toindex].
 							    selfpc))
-			    || profWrite32(fd, tos[toindex].count)) {
+			    || profWrite32(fd, cg.tos[toindex].count)) {
 				systemMessage(0, "ERROR writing mcount: arc");
 				fclose(fd);
 				return;
@@ -446,24 +466,24 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		return;
 	}
 
-	frompcindex = &froms[((long) frompcindex) / (HASHFRACTION * sizeof(*froms))];
+	frompcindex = &cg.froms[((long) frompcindex) / (HASHFRACTION * sizeof(*cg.froms))];
 	toindex = *frompcindex;
 	if (toindex == 0) {
 		/*
 		 * first time traversing this arc
 		 */
-		toindex = ++tos[0].link;
-		if (toindex >= tolimit) {
+		toindex = ++cg.tos[0].link;
+		if (toindex >= cg.tolimit) {
 			goto overflow;
 		}
 		*frompcindex = (unsigned short) toindex;
-		top = &tos[toindex];
+		top = &cg.tos[toindex];
 		top->selfpc = selfpc;
 		top->count = 1;
 		top->link = 0;
 		return;
 	}
-	top = &tos[toindex];
+	top = &cg.tos[toindex];
 	if (top->selfpc == selfpc) {
 		/*
 		 * arc at front of chain; usual case.
@@ -486,11 +506,11 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 			 * so we allocate a new tostruct
 			 * and link it to the head of the chain.
 			 */
-			toindex = ++tos[0].link;
-			if (toindex >= tolimit) {
+			toindex = ++cg.tos[0].link;
+			if (toindex >= cg.tolimit) {
 				goto overflow;
 			}
-			top = &tos[toindex];
+			top = &cg.tos[toindex];
 			top->selfpc = selfpc;
 			top->count = 1;
 			top->link = *frompcindex;
@@ -501,7 +521,7 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		 * otherwise, check the next arc on the chain.
 		 */
 		prevtop = top;
-		top = &tos[top->link];
+		top = &cg.tos[top->link];
 		if (top->selfpc == selfpc) {
 			/*
 			 * there it is.
