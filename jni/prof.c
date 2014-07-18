@@ -76,16 +76,16 @@ callgraph_t;
 
 typedef struct
 {
-	uint32_t 	low_pc;
-	uint32_t 	high_pc;
-	unsigned long 	text_size;
+	size_t 		low_pc;
+	size_t 		high_pc;
+	size_t 		text_size;
 }
 process_t;
 
 typedef struct
 {
-	int 	nb_bins;
-	char *	bins;
+	uint32_t 	nb_bins;
+	char *		bins;
 } 
 histogram_t;
 
@@ -163,7 +163,7 @@ static void histogram_bin_incr(int sig, siginfo_t *info, void *context)
 
 	// the pc should be divided by HISTFRACTION, but we do 
 	// a right shift with 1 because HISTFRACTION=2
-	unsigned int pc = (frompcindex - process.low_pc) >> 1;
+	size_t pc = (frompcindex - process.low_pc) >> 1;
 
 	if(pc < hist.nb_bins)
 	{
@@ -435,11 +435,11 @@ void moncleanup(void)
 	fclose(fd);
 }
 
-void profCount(unsigned short *frompcindex, char *selfpc)
+void profCount(size_t *frompcindex, char *selfpc)
 {
 	struct tostruct *top;
 	struct tostruct *prevtop;
-	long toindex;
+	size_t toindex;
 	/*
 	 * find the return address for mcount,
 	 * and the return address for mcount's caller.
@@ -460,14 +460,19 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 	 * for example: signal catchers get called from the stack,
 	 *   not from text space.  too bad.
 	 */
-	frompcindex = (unsigned short *)((long) frompcindex - (long) process.low_pc);
+	
+	//frompcindex = (size_t *) ( (size_t) frompcindex - process.low_pc);
 
-	if ((unsigned long) frompcindex > process.text_size) {
+	size_t frompc_val 	= (size_t) frompcindex - process.low_pc ;
+	size_t * frompc_ptr 	= (size_t *) frompc_val;
+
+	if (frompc_val > process.text_size) {
 		return;
 	}
 
-	frompcindex = &cg.froms[((long) frompcindex) / (HASHFRACTION * sizeof(*cg.froms))];
-	toindex = *frompcindex;
+	frompc_ptr = (size_t*) &cg.froms[frompc_val / (HASHFRACTION * sizeof(*cg.froms))];
+	toindex = *frompc_ptr;
+
 	if (toindex == 0) {
 		/*
 		 * first time traversing this arc
@@ -476,7 +481,7 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 		if (toindex >= cg.tolimit) {
 			goto overflow;
 		}
-		*frompcindex = (unsigned short) toindex;
+		*frompc_ptr = (size_t) toindex;
 		top = &cg.tos[toindex];
 		top->selfpc = selfpc;
 		top->count = 1;
@@ -513,8 +518,8 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 			top = &cg.tos[toindex];
 			top->selfpc = selfpc;
 			top->count = 1;
-			top->link = *frompcindex;
-			*frompcindex = (unsigned short) toindex;
+			top->link = *frompc_ptr;
+			*frompc_ptr = (size_t) toindex;
 			return;
 		}
 		/*
@@ -531,8 +536,8 @@ void profCount(unsigned short *frompcindex, char *selfpc)
 			top->count++;
 			toindex = prevtop->link;
 			prevtop->link = top->link;
-			top->link = *frompcindex;
-			*frompcindex = (unsigned short) toindex;
+			top->link = *frompc_ptr;
+			*frompc_ptr = (size_t) toindex;
 			return;
 		}
 	}
@@ -542,4 +547,5 @@ out:
 overflow:
 	systemMessage(0, "mcount: tos overflow\n");
 	goto out;
+
 }
