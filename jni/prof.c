@@ -412,7 +412,6 @@ void moncleanup(void)
 				systemMessage(0, "ERROR writing mcount: arc");
 				fclose(fd);
 				return;
-			} else {
 			}
 		}
 	}
