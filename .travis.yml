@@ -5,6 +5,8 @@ before_install:
   - wget --timeout=30 http://dl.google.com/android/ndk/android-ndk32-r10-linux-x86.tar.bz2 -O ndk.tar.bz2
   - tar -xf ndk.tar.bz2
   - export ANDROID_HOME=$(pwd)/android-sdk-linux
+  - sudo apt-get update -qq
+  - sudo apt-get install -qq --force-yes libgd2-xpm ia32-libs ia32-libs-multiarch
 script:
   - PROFILER_VERSION=$(git describe)
   - make
