@@ -3,6 +3,8 @@
 #include <assert.h>
 #include "read_maps.h"
 
+int opt_is_shared_lib = 1;
+
 static void test_read_maps(void)
 {
 	FILE *fp = fopen("maps.txt", "r");

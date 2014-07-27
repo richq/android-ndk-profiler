@@ -12,9 +12,12 @@
 #include <stdlib.h>
 #include "read_maps.h"
 
+#ifdef ANDROID
 #include <android/log.h>    /* for __android_log_print, ANDROID_LOG_INFO, etc */
-
 #define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "PROFILING", __VA_ARGS__)
+#else
+#define LOGI(...)  do { printf(__VA_ARGS__) ; printf("\n"); } while (0)
+#endif
 
 static char s_line[256];
 extern int opt_is_shared_lib;
