@@ -66,35 +66,28 @@
 
 #define DEFAULT_GMON_OUT "/sdcard/gmon.out"
 
-typedef struct
-{
- 	unsigned short *	froms;
- 	struct tostruct*	tos;
- 	long 			tolimit;
-}
-callgraph_t;
+typedef struct {
+	unsigned short *froms;
+	struct tostruct *tos;
+	long tolimit;
+} callgraph_t;
 
-typedef struct
-{
-	size_t 		low_pc;
-	size_t 		high_pc;
-	size_t 		text_size;
-}
-process_t;
+typedef struct {
+	size_t low_pc;
+	size_t high_pc;
+	size_t text_size;
+} process_t;
 
-typedef struct
-{
-	uint32_t 	nb_bins;
-	char *		bins;
-} 
-histogram_t;
+typedef struct {
+	uint32_t nb_bins;
+	char *bins;
+} histogram_t;
 
-static histogram_t 	hist;
-static process_t 	process;
-static callgraph_t 	cg;
-static struct 		proc_map *s_maps = NULL;
-       int		opt_is_shared_lib = 0;
-
+static histogram_t hist;
+static process_t process;
+static callgraph_t cg;
+static struct proc_map *s_maps = NULL;
+int opt_is_shared_lib = 0;
 
 static void systemMessage(int a, const char *msg)
 {
@@ -155,18 +148,17 @@ static int get_max_samples_per_sec()
 
 static void histogram_bin_incr(int sig, siginfo_t *info, void *context)
 {
-	ucontext_t *ucontext 		= (ucontext_t*) context;
-	struct sigcontext *mcontext 	= &ucontext->uc_mcontext;
-	uint32_t frompcindex 		= mcontext->arm_pc;
+	ucontext_t *ucontext = (ucontext_t *) context;
+	struct sigcontext *mcontext = &ucontext->uc_mcontext;
+	uint32_t frompcindex = mcontext->arm_pc;
 
 	uint16_t *b = (uint16_t *) hist.bins;
 
-	// the pc should be divided by HISTFRACTION, but we do 
-	// a right shift with 1 because HISTFRACTION=2
+	/* the pc should be divided by HISTFRACTION, but we do */
+	/* a right shift with 1 because HISTFRACTION=2 */
 	size_t pc = (frompcindex - process.low_pc) >> 1;
 
-	if(pc < hist.nb_bins)
-	{
+	if (pc < hist.nb_bins) {
 		b[pc]++;
 	}
 }
@@ -181,7 +173,8 @@ static void add_profile_handler(int sample_freq)
 	int result = sigaction(SIGPROF, &action, NULL);
 	if (result != 0) {
 		/* panic */
-		LOGI("add_profile_handler, sigaction failed %d %d", result, errno);
+		LOGI("add_profile_handler, sigaction failed %d %d", result,
+		     errno);
 		return;
 	}
 
@@ -205,29 +198,28 @@ static long remove_profile_handler(void)
 
 static int select_frequency()
 {
-	int max_samples	= get_max_samples_per_sec();
-	char *freq 	= getenv("CPUPROFILE_FREQUENCY");
-	
-	if (!freq) 
-	{
+	int max_samples = get_max_samples_per_sec();
+	char *freq = getenv("CPUPROFILE_FREQUENCY");
+
+	if (!freq) {
 		LOGI("using sample frequency: %d", max_samples);
 		return max_samples;
 	}
 
 	int freqval = strtol(freq, 0, 0);
 
-	if (freqval <= 0)
-	{
-		LOGI("Invalid frequency value: %d, using default: %d", freqval, max_samples);
+	if (freqval <= 0) {
+		LOGI("Invalid frequency value: %d, using default: %d",
+		     freqval, max_samples);
 		return max_samples;
 	}
 
 	LOGI("Maximum number of samples per second: %d", max_samples);
 	LOGI("Specified frequency: %d", freqval);
 
-	if (freqval > max_samples)
-	{
-		LOGI("Specified sample rate is too large, using %d", max_samples);
+	if (freqval > max_samples) {
+		LOGI("Specified sample rate is too large, using %d",
+		     max_samples);
 		return max_samples;
 	}
 
@@ -242,8 +234,8 @@ static void process_init()
 	 * round lowpc and highpc to multiples of the density we're using
 	 * so the rest of the scaling (here and in gprof) stays in ints.
 	 */
-	process.low_pc 	= ROUNDDOWN(process.low_pc, HISTFRACTION * sizeof(HISTCOUNTER));
-	process.high_pc	= ROUNDUP(process.high_pc, HISTFRACTION * sizeof(HISTCOUNTER));
+	process.low_pc = ROUNDDOWN(process.low_pc, HISTFRACTION * sizeof(HISTCOUNTER));
+	process.high_pc = ROUNDUP(process.high_pc, HISTFRACTION * sizeof(HISTCOUNTER));
 	process.text_size = process.high_pc - process.low_pc;
 }
 
@@ -253,7 +245,7 @@ static int histogram_init()
 {
 	hist.nb_bins = (process.text_size / HISTFRACTION);
 
-	//FIXME: check if '2' is the size of short or if it has another meaning
+	/* FIXME: check if '2' is the size of short or if it has another meaning */
 	hist.bins = calloc(1, sizeof(short) * hist.nb_bins);
 	if (!hist.bins) {
 		systemMessage(0, MSG);
@@ -264,8 +256,8 @@ static int histogram_init()
 
 static int cg_init()
 {
-	//FIXME: what should be the size of 'froms'
-	//froms = calloc(1, 4 * process.text_size / HASHFRACTION);
+	/* FIXME: what should be the size of 'froms' */
+	/* froms = calloc(1, 4 * process.text_size / HASHFRACTION); */
 	cg.froms = calloc(1, sizeof(short) * hist.nb_bins);
 
 	if (cg.froms == NULL) {
@@ -300,19 +292,15 @@ void monstartup(const char *libname)
 {
 	FILE *self = fopen("/proc/self/maps", "r");
 
-	if(!self)
-	{
+	if (!self) {
 		systemMessage(1, "Cannot open memory maps file");
 		return;
 	}
 
-	if (strstr(libname, ".so"))
-	{
+	if (strstr(libname, ".so")) {
 		LOGI("start profiling shared library %s", libname);
 		opt_is_shared_lib = 1;
-	} 
-	else
-	{
+	} else {
 		LOGI("start profiling executable %s", libname);
 		opt_is_shared_lib = 0;
 	}
@@ -330,16 +318,15 @@ void monstartup(const char *libname)
 		return;
 	}
 
-	LOGI("Profile %s, pc: 0x%x-0x%x, base: 0x%d"
-	, 	libname, process.low_pc, process.high_pc, s_maps->base
-	);
-	
-	if(!cg_init()) {
+	LOGI("Profile %s, pc: 0x%x-0x%x, base: 0x%d", libname,
+	     process.low_pc, process.high_pc, s_maps->base);
+
+	if (!cg_init()) {
 		return;
 	}
 
 	int sample_freq = select_frequency();
-	add_profile_handler(sample_freq);	
+	add_profile_handler(sample_freq);
 }
 
 static const char *get_gmon_out(void)
@@ -353,13 +340,13 @@ static const char *get_gmon_out(void)
 __attribute__((visibility("default")))
 void moncleanup(void)
 {
-	FILE *		fd;
-	int 		fromindex;
-	int 		endfrom;
-	uint32_t 	frompc;
-	int 		toindex;
-	struct 		gmon_hdr ghdr;
-	const char *	gmon_name = get_gmon_out();
+	FILE *fd;
+	int fromindex;
+	int endfrom;
+	uint32_t frompc;
+	int toindex;
+	struct gmon_hdr ghdr;
+	const char *gmon_name = get_gmon_out();
 
 	long ival = remove_profile_handler();
 	int sample_freq = 1000000 / ival;
@@ -380,15 +367,14 @@ void moncleanup(void)
 		return;
 	}
 
-	if (	profWrite8(fd, GMON_TAG_TIME_HIST) 
-	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) process.low_pc)) 
-	||	profWrite32(fd, get_real_address(s_maps, (uint32_t) process.high_pc)) 
-	||	profWrite32(fd, hist.nb_bins) 
-	||	profWrite32(fd, sample_freq) 
-	||	profWrite(fd, "seconds", 15) 
-	||	profWrite(fd, "s", 1)
-	) 
-	{
+	if (profWrite8(fd, GMON_TAG_TIME_HIST)
+	    || profWrite32(fd, get_real_address(s_maps, (uint32_t) process.low_pc))
+	    || profWrite32(fd, get_real_address(s_maps, (uint32_t) process.high_pc))
+	    || profWrite32(fd, hist.nb_bins)
+	    || profWrite32(fd, sample_freq)
+	    || profWrite(fd, "seconds", 15)
+	    || profWrite(fd, "s", 1)
+	   ) {
 		systemMessage(0, "ERROR writing mcount: gmon.out hist");
 		fclose(fd);
 		return;
@@ -398,7 +384,7 @@ void moncleanup(void)
 	int i;
 	for (i = 0; i < hist.nb_bins; ++i) {
 		profPut16((char *) &count, hist_sample[i]);
-		//LOGI("bin: %d, value: %d", i, hist_sample[i]);
+		/* LOGI("bin: %d, value: %d", i, hist_sample[i]); */
 		if (fwrite(&count, sizeof(count), 1, fd) != 1) {
 			systemMessage(0, "ERROR writing file mcount: gmon.out sample");
 			fclose(fd);
@@ -426,9 +412,7 @@ void moncleanup(void)
 				systemMessage(0, "ERROR writing mcount: arc");
 				fclose(fd);
 				return;
-			}
-			else
-			{
+			} else {
 			}
 		}
 	}
@@ -460,17 +444,17 @@ void profCount(size_t *frompcindex, char *selfpc)
 	 * for example: signal catchers get called from the stack,
 	 *   not from text space.  too bad.
 	 */
-	
-	//frompcindex = (size_t *) ( (size_t) frompcindex - process.low_pc);
 
-	size_t frompc_val 	= (size_t) frompcindex - process.low_pc ;
-	size_t * frompc_ptr 	= (size_t *) frompc_val;
+	/* frompcindex = (size_t *) ( (size_t) frompcindex - process.low_pc); */
+
+	size_t frompc_val = (size_t) frompcindex - process.low_pc;
+	size_t *frompc_ptr = (size_t *) frompc_val;
 
 	if (frompc_val > process.text_size) {
 		return;
 	}
 
-	frompc_ptr = (size_t*) &cg.froms[frompc_val / (HASHFRACTION * sizeof(*cg.froms))];
+	frompc_ptr = (size_t *) &cg.froms[frompc_val / (HASHFRACTION * sizeof(*cg.froms))];
 	toindex = *frompc_ptr;
 
 	if (toindex == 0) {
