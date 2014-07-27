@@ -1,11 +1,8 @@
 language: C
 # secret keys to upload results to google code
 env:
-  global:
-    - secure: "Apy0gMupfrmOBqBil20m+hF/ZiuvHeOi4KXLecOqQRt8ImvKd+g1BlG+CfDy\n444JRV6Nkci3Re5YocvULy+pSoqY5iyFk8ohiLb5JwwrKjmUn4d/iBnAXb+D\nJivia3zkjMfjfdvjMhYhla1SrqQahiDRRmhftt70UDq5Y3GgoYA="
-    - secure: "ZRUwTv7LqJu4SYQQFW3w9pAZTehZUkDn0iri4knaMVnWho4WqwPDrvORDouG\nh/GbZ3H633r+zb/OTQr0LSRqpWKFvyTGGfVuLT0XA9hhJIKQZPAzcCi//llE\nSyKD4Pcee9X48KVHK1u+0sOZ8IM8wRdG6yHDJkAB/lIpSeDTNcI="
 before_install:
-  - wget --timeout=30 http://dl.google.com/android/ndk/android-ndk-r8d-linux-x86.tar.bz2 -O ndk.tar.bz2
+  - wget --timeout=30 http://dl.google.com/android/ndk/android-ndk32-r10-linux-x86.tar.bz2 -O ndk.tar.bz2
   - tar -xf ndk.tar.bz2
   - export ANDROID_HOME=$(pwd)/android-sdk-linux
 script:
@@ -13,10 +10,3 @@ script:
   - make
   - make check
   - make srcdist dist VERSION="$PROFILER_VERSION"
-after_script:
-  - PROJECT=android-ndk-profiler
-  - wget --timeout=30 http://support.googlecode.com/svn/trunk/scripts/googlecode_upload.py
-  - python googlecode_upload.py -u "$GOOGLE_CODE_USERNAME" -w "$GOOGLE_CODE_PASSWORD"
-    -s "Source code for version $PROFILER_VERSION" -p $PROJECT -l Type-Source $PROJECT-$PROFILER_VERSION.tar.gz
-  - python googlecode_upload.py -u "$GOOGLE_CODE_USERNAME" -w "$GOOGLE_CODE_PASSWORD"
-    -s "Automatic upload for version $PROFILER_VERSION" -p $PROJECT -l Type-Archive $PROJECT-$PROFILER_VERSION.zip
