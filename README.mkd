@@ -1,8 +1,13 @@
-Profile Android NDK code. Further instructions here:
+Profile Android NDK code. Further instructions [on the docs/Usage.md page][Usage].
 
-http://code.google.com/p/android-ndk-profiler/wiki/Usage
+There are examples on the [docs/Example.md][Example] page and the design desicions are discussed on the [docs/HowItWorks.md][HowItWorks] page.
 
 You could also try [FPL Utils - NDK perf](https://google.github.io/fplutil/android_ndk_perf.html),
 which provides a non-intrusive way to profile your applications using Linux perf.
 
+
 [![Build Status](https://travis-ci.org/richq/android-ndk-profiler.png)](https://travis-ci.org/richq/android-ndk-profiler)
+
+[Usage]: https://github.com/richq/android-ndk-profiler/blob/master/docs/Usage.md
+[Example]: https://github.com/richq/android-ndk-profiler/blob/master/docs/Example.md
+[HowItWorks]: https://github.com/richq/android-ndk-profiler/blob/master/docs/HowItWorks.md
