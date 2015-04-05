@@ -18,6 +18,12 @@ die() {
   exit 1
 }
 
+SVN=$(which svn 2>/dev/null)
+
+if [ -z "$SVN" ]; then
+    die "Could not find svn in the path, maybe subversion is not installed?"
+fi
+
 # build the library and copy it to the correct place
 cd ..
 make dist VERSION=example|| die "Error building profiling code"
@@ -32,9 +38,9 @@ sdk=$(dirname $(dirname $android))
 ndk=$(dirname $ndk_build)
 
 if [ ! -d freeciv-android ] ; then
-    svn checkout http://freeciv-android.googlecode.com/svn/trunk/ freeciv-android || die "Could not checkout code"
+    $SVN checkout http://freeciv-android.googlecode.com/svn/trunk/ freeciv-android || die "Could not checkout code"
 else
-    svn revert -R freeciv-android
+    $SVN revert -R freeciv-android
     rm freeciv-android/custom_rules.xml freeciv-android/ant.properties
 fi
 # update the example to get the build files
@@ -44,7 +50,7 @@ patch -i freeciv-android.patch -p0 || die "Could not patch for profiling"
 
 # build
 cd freeciv-android
-$ndk_build -j3 || die "Error building with ndk-build"
+$ndk_build APP_ABI=armeabi -j3 || die "Error building with ndk-build"
 ant debug || die "Error building with ant"
 
 echo "Run the following to install the example"

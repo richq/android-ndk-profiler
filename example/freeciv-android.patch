@@ -137,3 +137,24 @@ Index: freeciv-android/jni/freeciv/ai/Android.mk
 -include $(BUILD_STATIC_LIBRARY)
 \ No newline at end of file
 +include $(BUILD_STATIC_LIBRARY)
+Index: jni/freeciv/utility/log.c
+===================================================================
+--- freeciv-android/jni/freeciv/utility/log.c	(revision 3)
++++ freeciv-android/jni/freeciv/utility/log.c	(working copy)
+@@ -257,11 +257,11 @@
+ 	 */
+ 
+ 	switch (level) {
+-	case LOG_FATAL:   LOG(ANDROID_LOG_FATAL, message); break;
+-	case LOG_ERROR:   LOG(ANDROID_LOG_ERROR, message); break;
+-	case LOG_NORMAL:  LOG(ANDROID_LOG_DEFAULT, message); break;
+-	case LOG_VERBOSE: LOG(ANDROID_LOG_VERBOSE, message); break;
+-	case LOG_DEBUG:   LOG(ANDROID_LOG_DEBUG, message); break;
++	case LOG_FATAL:   LOG(ANDROID_LOG_FATAL, "%s", message); break;
++	case LOG_ERROR:   LOG(ANDROID_LOG_ERROR, "%s", message); break;
++	case LOG_NORMAL:  LOG(ANDROID_LOG_DEFAULT, "%s", message); break;
++	case LOG_VERBOSE: LOG(ANDROID_LOG_VERBOSE, "%s", message); break;
++	case LOG_DEBUG:   LOG(ANDROID_LOG_DEBUG, "%s", message); break;
+ 	}
+ 
+   if (log_filename || (!log_callback)) {
