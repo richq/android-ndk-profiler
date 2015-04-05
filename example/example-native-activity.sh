@@ -34,15 +34,18 @@ ndk=$(dirname $ndk_build)
 if [ ! -d native-activity ] ; then
     # copy example from ndk
     cp -r $ndk/samples/native-activity/ . || die "Could not copy the example"
+    # find the oldest target available that's 10 or higher
+    exampletarget=$($android list targets | awk '/android-[0-9]/{gsub("\"", ""); split($4, a, "-"); if (a[2] >= 10) { print $4}}' | head -n1)
+    test -z "$exampletarget" && die "unable to find a suitable android target android-10 or up"
     # update the example to get the build files
-    $android update project -p ./native-activity -s --target android-10 || die "Unable to create build files for native-activity"
+    $android update project -p ./native-activity -s --target $exampletarget || die "Unable to create build files for native-activity"
     # patch it so it has profiling
     patch -i native-activity.patch -p0 || die "Could not patch native-activity for profiling"
 fi
 
 # build
 cd native-activity
-$ndk_build || die "Error building with ndk-build"
+$ndk_build APP_ABI=armeabi || die "Error building with ndk-build"
 ant debug || die "Error building with ant"
 
 echo "Run the following to install the example"
