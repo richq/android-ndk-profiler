@@ -37,8 +37,11 @@ fi
 
 # copy example from ndk
 cp -r $ndk/samples/san-angeles/ . || die "Could not copy the example"
+# min target is android-10
+exampletarget=$($android list targets | awk '/android-[0-9]/{gsub("\"", ""); split($4, a, "-"); if (a[2] >= 10) { print $4}}' | head -n1)
+test -z "$exampletarget" && die "unable to find a suitable android target android-10 or up"
 # update the example to get the build files
-$android update project -p ./san-angeles -n com.example.SanAngeles --target android-10 || die "Unable to create build files for san-angeles"
+$android update project -p ./san-angeles -n com.example.SanAngeles --target $exampletarget || die "Unable to create build files for san-angeles"
 
 # patch the makefile so it has profiling
 sed -i 's/^include \$(BUILD.*$/LOCAL_CFLAGS += -pg\nLOCAL_STATIC_LIBRARIES := android-ndk-profiler\n&\n$(call import-module,android-ndk-profiler)/g' \
@@ -53,7 +56,7 @@ sed -i 's@^</manifest>@<uses-permission android:name="android.permission.WRITE_E
 
 # build
 cd san-angeles
-$ndk_build || die "Error building with ndk-build"
+$ndk_build APP_ABI=armeabi || die "Error building with ndk-build"
 ant debug || die "Error building with ant"
 
 echo "Run the following to install the example"
