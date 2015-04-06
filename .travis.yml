@@ -6,7 +6,7 @@ before_install:
   - sudo apt-get install -qq -y libgd2-xpm ia32-libs ia32-libs-multiarch p7zip > /dev/null
   - wget -q --timeout=120 http://dl.google.com/android/ndk/android-ndk-r10d-linux-x86.bin -O ndk.bin
   - md5sum ndk.bin | grep 70ed6d8c34e7e620c145b791e8eeef89
-  - 7zr x ndk.bin > /dev/null
+  - 7zr x ndk.bin $(sed 's/^/ -xr!/g' ndk-excludes.txt) | awk '/^Extracting/ { i++; if (i > 50) {print; i = 0}}'
   - export ANDROID_HOME=$(pwd)/android-sdk-linux
 script:
   - PROFILER_VERSION=$(git describe)

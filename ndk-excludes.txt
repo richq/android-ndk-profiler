@@ -1,0 +1,11 @@
+llvm-*
+stlport
+mips
+x86-4.8
+docs
+gnu-libstdc++
+arch-x86*
+arch-mips*
+*4.9*
+*4.6*
+python2.7
