@@ -1,10 +1,13 @@
+**WARNING: Unmaintained code ahead**
+
+As an alternative please try out Google's own [FPL Utils - NDK perf](https://google.github.io/fplutil/android_ndk_perf.html),
+which provides a non-intrusive way to profile your applications using Linux perf. However be warned that this too is only supported on [2 somewhat-obsolete devices](https://github.com/google/fplutil/blob/master/bin/android_ndk_perf.py#L58).
+
+The general churn in Android means that this library has suffered some severe bit-rot over the last couple of years. If you can help then pull requests are appreciated, but I no longer have the time or motivation to work on the project.
+
 Profile Android NDK code. Further instructions [on the docs/Usage.md page][Usage].
 
-There are examples on the [docs/Example.md][Example] page and the design desicions are discussed on the [docs/HowItWorks.md][HowItWorks] page.
-
-You could also try [FPL Utils - NDK perf](https://google.github.io/fplutil/android_ndk_perf.html),
-which provides a non-intrusive way to profile your applications using Linux perf.
-
+There are examples on the [docs/Example.md][Example] page and the design decisions are discussed on the [docs/HowItWorks.md][HowItWorks] page.
 
 [![Build Status](https://travis-ci.org/richq/android-ndk-profiler.png)](https://travis-ci.org/richq/android-ndk-profiler)
 
